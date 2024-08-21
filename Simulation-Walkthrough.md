@@ -4,6 +4,9 @@ In this document, we provide code for the simulations described in the
 manuscript *Context Tree Clustering and Classification*. We first
 introduce the context tree structural dissimilarity measures.
 
+If you would like to run the results chunk by chunk, please refer to the
+*Simulation-Walkthrough.Rmd* file.
+
 ## Relevant libraries
 
     if (!require("data.tree")) install.packages("data.tree", dependencies = TRUE); library("data.tree")
