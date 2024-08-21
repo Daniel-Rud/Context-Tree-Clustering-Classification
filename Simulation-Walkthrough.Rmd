@@ -2,7 +2,7 @@
 title: "Simulation-Code"
 author: "Daniel Rud"
 date: "2024-08-21"
-output: html_document
+output: md_document
 ---
 
 ```{r setup, include=FALSE}
@@ -12,9 +12,9 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Introduction 
 
-In this document, we provide code for the simulations described in the manuscript \textit{Context Tree Clustering and Classification}. We first introduce the context tree structural dissimilarity measures.  
+In this document, we provide code for the simulations described in the manuscript *Context Tree Clustering and Classification*. We first introduce the context tree structural dissimilarity measures.  
 
-Relevant libraries 
+## Relevant libraries 
 
 ```{r}
 if (!require("data.tree")) install.packages("data.tree", dependencies = TRUE); library("data.tree")
@@ -224,7 +224,7 @@ Mismatch <- function(mm, true_clusters, K)
 
 # Simulation Study:
 
-First, we define two generating VLMCs from two seperate state sequences. vlmcA and vlmcB serve as the two \textit{population} context trees from which we will simulate state sequences from.  
+First, we define two generating VLMCs from two seperate state sequences. vlmcA and vlmcB serve as the two *population* context trees from which we will simulate state sequences from.  
 ```{r}
 
 dataA = c(1, 3, 3, 3, 0, 0, 2, 1, 3, 3, 3, 2, 1, 0, 0, 3, 0, 4, 3, 2, 1, 2, 1, 0, 0, 4, 2, 1, 0, 3, 3, 0, 3, 3, 3, 3, 0, 0, 2, 1, 3, 0, 0, 3, 3, 3, 2, 1, 0, 0, 3, 0, 3, 3, 0, 3, 0, 3, 3, 0, 3, 0, 3, 0, 3, 4, 3, 2, 1, 0, 0, 3, 2, 1, 2, 1, 0, 3, 3, 3, 3, 2, 1, 3, 3, 0, 2, 1, 4, 3, 0, 3, 3, 3, 3, 4, 3, 0, 3, 3)
@@ -616,9 +616,6 @@ cat(paste0("Clustering Results for n.time_series = ", n.time_series, ", n = ",n,
 clustering_results 
 
 ```
-
-
-
 
 
 
