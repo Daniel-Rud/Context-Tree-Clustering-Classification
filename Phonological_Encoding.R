@@ -1,4 +1,14 @@
 
+
+source('DictionaryExtractionV2.R')
+source('findNumSyl.R')
+
+if (!requireNamespace("spacyr", quietly = TRUE)) install.packages("spacyr"); library(spacyr)
+if (!requireNamespace("tokenizers", quietly = TRUE)) install.packages("tokenizers"); library(tokenizers)
+if (!requireNamespace("english", quietly = TRUE)) install.packages("english"); library(english)
+
+
+
 Phonological_Encoding= function(input_file, output_file="", dictionary_type="Webster", elements= c("the", "a", "at"))
 {
 
@@ -74,11 +84,6 @@ Parse_Token <- function(Word, Num_Sil,Stressed_syllable,Output_file,Phonetic_wor
 ######## START HERE
 ##################################################################################################
 ##################################################################################################
-   source('DictionaryExtractionV2.R')
-   source('findNumSyl.R')
-   library(spacyr)
-   library(tokenizers)
-   library(english)
 
    file <-  input_file
    Output_file=0

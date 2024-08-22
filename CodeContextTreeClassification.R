@@ -379,7 +379,7 @@ set.seed(1)
 			homogeneity[ind.alpha_divisor] = 0
 			for (ind.k in 1:K)
 			{
-				## find the medoids of the groups from the classification lables
+				## find the medoids of the groups from the classification labels
 				med = pam(as.dist(distanceMatrix[which(all_lables == (ind.k-1)),which(all_lables == (ind.k-1))]),k = 1)
 				homogeneity[ind.alpha_divisor] = homogeneity[ind.alpha_divisor] + sum(fulldistanceMatrix[med$medoids,which(all_lables == (ind.k-1))])
 			}

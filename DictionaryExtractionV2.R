@@ -1,8 +1,11 @@
 #libraries
-library(rvest)
-library(magrittr)
-library(stringr)
-library(tokenizers)
+
+
+if (!requireNamespace("rvest", quietly = TRUE)) install.packages("rvest"); library(rvest)
+if (!requireNamespace("magrittr", quietly = TRUE)) install.packages("magrittr"); library(magrittr)
+if (!requireNamespace("stringr", quietly = TRUE)) install.packages("stringr"); library(stringr)
+if (!requireNamespace("tokenizers", quietly = TRUE)) install.packages("tokenizers"); library(tokenizers)
+
 
 
 initialPat=function(pos)
@@ -200,7 +203,7 @@ sAsENG= function(Word, type)
 	}
 	    	
 	#find html portion which contains all word part of speeches for the dictionary
-	cleanPos= html %>% html_nodes(".col-lg-12  ") %>% html_text() %>% strsplit(split="\n")%>% 			unlist()
+	cleanPos= html %>% html_nodes(".parts-of-speech") %>% html_text(trim = T) %>% strsplit(split="\n")%>% unlist()
 	
 	#clean the string
 	POS=0
@@ -210,17 +213,19 @@ sAsENG= function(Word, type)
 	}
 
 	#find html portion with all associated pronounciations 
-	cleanPron= html %>% html_nodes(".col ") %>% html_text() %>% strsplit(split="\n")%>% unlist()%>% 		paste(collapse="")
+	cleanPron= html %>% html_nodes(".play-pron-v2") %>% html_text(trim = T) %>% strsplit(split="\n")%>% unlist()
+	cleanPron = cleanPron[1:length(POS)]
 	
-	PRON= cleanPRON(cleanPron)
-	if(is.na(PRON[1]) &&sum(POS=="abbreviation")==0){ #no pronounciation given and NOT abbreviation   #will get first entry from cambridge dictionary, planB
+	# PRON= cleanPRON(cleanPron)
+	PRON = cleanPron
+	if((is.na(PRON[1]) ||is.null(PRON[1]) ) && (sum(POS=="abbreviation")==0)){ #no pronounciation given and NOT abbreviation   #will get first entry from cambridge dictionary, planB
 		print("Calling Cambridge dictionary because phonetic spelling was not given")
-		return(sAsENGBackUp(Word, type))
+		return(sAsBRIT(Word, type))
 		}
 	
 	loc=1
 	wordType= initialPat(type)
-	if(!POS==0)
+	if(!identical(POS, 0))
 	{
 	found=FALSE
 	i=1
@@ -255,6 +260,14 @@ sAsENG= function(Word, type)
 		loc=1
 	#proper phonetic spelling to find info from
 	decodeStr= PRON[loc]
+	
+	# if no phonetic string, just take the first one.  This happened for the word 
+	# found, the verb did not have pronunciation.  
+	if(is.na(decodeStr))
+	{
+	  decodeStr = PRON[1]
+	}
+	
 	also=unlist(gregexpr("also",decodeStr)) #account for 2 pronounciations in phonetic spelling
 	if(also!=-1)
 	{
@@ -325,6 +338,40 @@ sAsENG= function(Word, type)
 	
 }
 
+extract_info <- function(data) {
+  # Extract word (removing the part of speech if attached)
+  word_part <- str_extract(data[1], "^\\w+")
+  part_of_speech <- str_extract(data[1], "(verb|noun|adjective|adverb)")
+  
+  # Remove part of speech from the word if attached
+  word <- str_remove(word_part, part_of_speech)
+  
+  # Extract country
+  country_us <- ifelse(str_detect(data[1], "us"), "us", NA)
+  country_uk <- ifelse(str_detect(data[6], "uk"), "uk", NA)
+  
+  # Extract first phonetic spelling from US and UK (handling multiple phonetics)
+  phonetic_us <- str_extract(data[6], "/.+?/")
+  phonetic_uk <- str_extract(data[11], "/.+?/")
+  
+  # Split the phonetic spelling if it has a comma and extract only the first one
+  phonetic_us <- str_split(phonetic_us, ",")[[1]][1] %>% str_trim()
+  phonetic_uk <- str_split(phonetic_uk, ",")[[1]][1] %>% str_trim()
+  
+  # Create a result list
+  result <- c(
+    word = word,
+    part_of_speech = part_of_speech,
+    country_us = country_us,
+    phonetic_us = phonetic_us,
+    country_uk = country_uk,
+    phonetic_uk = phonetic_uk
+  )
+  
+  return(result)
+}
+
+
 cleanBrit= function(Array, Word){
 	outputArray= vector("character", 4) #will have entry, POS, uk/us, pronunciation
 	array=Array
@@ -336,23 +383,26 @@ cleanBrit= function(Array, Word){
 			outputArray[1]= Word #because detected in if condition
 			array[i]= gsub(Word, "", array[i]) #word already matched in if stmt
 			strt= unlist(regexpr("[", array[i], fixed=TRUE))[1]-1
-			if(!strt<0)
+			if(!(strt<0))
 			{
 				end= unlist(regexpr("]", array[i], fixed=TRUE))[1]+1
-				array[i]= paste(substr(array[i], 1, strt), substr(array[i], end, 						nchar(array[i])))
+				array[i]= paste(substr(array[i], 1, strt), substr(array[i], end, 		
+				                                                  nchar(array[i])))
 			}
-			if(grepl(" us ", array[i])[1])
+			if(grepl(" us ", array[i])[1] && (outputArray[4] != "uk"))
 			{
 				outputArray[3]= "us"
 				strtRM= unlist(regexpr(" us ", array[i]))[1]
-				array[i]= paste(substr(array[i],1, strtRM), substr(array[i],      						strtRM+4,nchar(array[i])))
+				array[i]= paste(substr(array[i],1, strtRM), substr(array[i],      			
+				                                                   strtRM+4,nchar(array[i])))
 				outputArray[2]= trimws(array[i])
 			}
 			if(grepl(" uk ", array[i]))
 			{
 				outputArray[3]= "uk"
 				strtRM= unlist(regexpr(" uk ", array[i]))[1]
-				array[i]= paste(substr(array[i],1, strtRM), substr(array[i],      						strtRM+4,nchar(array[i])))
+				array[i]= paste(substr(array[i],1, strtRM), substr(array[i],      					
+				                                                   strtRM+4,nchar(array[i])))
 				outputArray[2]= trimws(array[i])
 			}
 			
@@ -383,7 +433,7 @@ sAsBRIT= function(Word, type)
 	}
 
 	#cleanScript has everything we need, POS and pronunciation
-	cleanScript= html %>% html_nodes(".dpos-h") %>% html_text() %>% strsplit(split="\n") 
+	cleanScript= html %>% html_nodes(".dpos-h") %>% html_text(trim = T) %>% strsplit(split="\n") 
 	
 	entries= html %>% html_nodes(".dhw") %>% html_text()
 	entry=entries[1]
@@ -405,29 +455,18 @@ sAsBRIT= function(Word, type)
 	
 	for(i in 1: length(cleanScript))
 	{
-		cleanScript[[i]]=cleanBrit(cleanScript[[i]], entry)
-		if(cleanScript[[i]][1]!="" && cleanScript[[i]][4]!="" ){
-			found=TRUE
-		}
+		cleanScript[[i]]=extract_info(cleanScript[[i]])
 	}
-	k=2	
-	while(!found && k<=length(entries))
-	{
-		cleanScript= html %>% html_nodes(".dpos-h") %>% html_text() %>% 						strsplit(split="\n") 
-		entry=entries[k]
-		#find proper entry 
 	
-		for(i in 1: length(cleanScript))
-		{
-			cleanScript[[i]]=cleanBrit(cleanScript[[i]], entry)
-			if(cleanScript[[i]][1]!="" && cleanScript[[i]][4]!="")
-			{
-				found=TRUE
-			}
-		}
+	
 
-	 k=k+1	
-	}	
+	# remove those that dont have uk phonetic spelling 
+	cleanScript = cleanScript[-which(is.na(sapply(cleanScript, "[[",6)))]
+	
+	# only keep relevant entries
+	cleanScript = lapply(cleanScript, FUN = function(x) {return(x[c(1,2,5,6)])})
+	
+	
 	pos=type
 	type= initialPat(type)
 	ukTruth= vector("numeric", length(cleanScript))
@@ -459,7 +498,7 @@ sAsBRIT= function(Word, type)
 		return(sAsBRITBackUp(Word, pos))
 	}
 	#look for entry with proper part of speech and uk 
-	index= which(totTruth==2)[1]
+	index= which(totTruth==3)[1]
 	#if cant find entry with both uk
 	if(is.na(index[1]))
 	{
@@ -472,12 +511,9 @@ sAsBRIT= function(Word, type)
 		}
 	}
 	#now proper entry is stored in index
-	decodeStr=""
-	if(!is.na(cleanScript[[index]][4]))
-		index= which(pronTruth==1)[1]
-	{
-		decodeStr= gsub("/", "", cleanScript[[index]][4], fixed=TRUE)
-	}
+	
+	decodeStr= gsub("/", "", cleanScript[[index]][4], fixed=TRUE)
+	
 	if(length(decodeStr)==0)
 	{
 		return(NA) #will revert to old for number of syllables
