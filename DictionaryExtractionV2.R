@@ -185,191 +185,199 @@ readUrl <- function(url) {
 }
 
 
+# we call the cambridge dictionary and get the US pronunciation
 
-sAsENG= function(Word, type)
+sAsENG= function(Word, type, country = "us")
 {
-	url=paste("https://www.merriam-webster.com/dictionary/",tolower(Word), sep="")
-	html= readUrl(url)  #try catch 
-	if(typeof(html)=="double") #check if word exists
-	{
-		return(NA)
-	}
-	entry= html %>% html_nodes(".hword ") %>% html_text() %>% strsplit(split="\n")%>% unlist()
-	entry=entry[1]
-	
-	if(length(unlist(tokenize_words(entry)))>1) # angeles returning East Los Angeles
-	{
-		return(NA)
-	}
-	    	
-	#find html portion which contains all word part of speeches for the dictionary
-	cleanPos= html %>% html_nodes(".parts-of-speech") %>% html_text(trim = T) %>% strsplit(split="\n")%>% unlist()
-	
-	#clean the string
-	POS=0
-	if(!is.null(cleanPos))
-	{
-		POS= cleanPOS(cleanPos, entry) 
-	}
-
-	#find html portion with all associated pronounciations 
-	cleanPron= html %>% html_nodes(".play-pron-v2") %>% html_text(trim = T) %>% strsplit(split="\n")%>% unlist()
-	cleanPron = cleanPron[1:length(POS)]
-	
-	# PRON= cleanPRON(cleanPron)
-	PRON = cleanPron
-	if((is.na(PRON[1]) ||is.null(PRON[1]) ) && (sum(POS=="abbreviation")==0)){ #no pronounciation given and NOT abbreviation   #will get first entry from cambridge dictionary, planB
-		print("Calling Cambridge dictionary because phonetic spelling was not given")
-		return(sAsBRIT(Word, type))
-		}
-	
-	loc=1
-	wordType= initialPat(type)
-	if(!identical(POS, 0))
-	{
-	found=FALSE
-	i=1
-	if(length(wordType)>1)
-	{
-		while(!found && i<=length(wordType))
-		{
-			loc= which(POS==wordType[i])
-			if(length(loc)>0)
-				found=TRUE
-			else
-				i=i+1	
-		}
-	}
-	if(length(wordType)>1 && found==FALSE)
-	{
-		return(NA)
-	}
-	
-	loc= which(POS==wordType[i])
-	}
-
-	
-	
-	if(length(loc)>1)
-		loc=loc[1]
-	if(length(loc)==0 && sum(POS=="abbreviation")>=1) #put here to check for abbreviation in case abbreviation can be both a word and an abbreviation
-		return("abb")
-	if(length(loc)==0 && length(PRON)!=0)
-		loc=1
-	if(loc>length(PRON)) #if there isnt a pronounciation for the POS
-		loc=1
-	#proper phonetic spelling to find info from
-	decodeStr= PRON[loc]
-	
-	# if no phonetic string, just take the first one.  This happened for the word 
-	# found, the verb did not have pronunciation.  
-	if(is.na(decodeStr))
-	{
-	  decodeStr = PRON[1]
-	}
-	
-	also=unlist(gregexpr("also",decodeStr)) #account for 2 pronounciations in phonetic spelling
-	if(also!=-1)
-	{
-		decodeStr= substr(decodeStr,1, also-1)
-	}
-	
-	## Address "couple" and "family". 
-	
-	colonLocs = regexpr(";", decodeStr) 
-	if(colonLocs[1]!=-1)
-	{
-		decodeStr = substr(decodeStr, 1, colonLocs[1]-1)
-		decodeStr = trimws(decodeStr)
-	}
-	
-	##
-	
-	
-	numSyl= str_count(decodeStr, "-")+1
-	p1=unlist(gregexpr("-​)", decodeStr))[1]
-	p2=unlist(gregexpr("(-", decodeStr, fixed=TRUE))[1]
-	if(p1!=-1 ||p2!=-1 ) # case with (e-) in phonetic spelling
-	{
-		if(p1==-1)
-		p1=NULL
-		if(p2==-1)
-		p2=NULL
-		
-		numSyl=numSyl-length(p1)-length(p2)
-	}
-	stressPos= unlist(gregexpr("ˈ",decodeStr))
- 	substrB4Stress=substr(decodeStr, 1,stressPos)
- 	numDashB4=unlist(gregexpr("-", substrB4Stress))
- 	
- 	if(numDashB4[1]==-1){
- 		numDashB4=0
- 		
- 	}else{
- 		numDashB4=length(numDashB4)
- 	}
- 		
- 	Stress= numDashB4+1
-
-#####################################
-#check if word and entry are the same
-#####################################
-	
-	if(Word!=entry)
-	{
-     if (is.element(toupper(substr(Word,nchar(Word)-2,nchar(Word))),c("TED","DED", "FUL", "ING"))) #escalated, suspected, decided, suspenseful
-      numSyl=numSyl+1
-      
-        if (is.element(toupper(substr(Word,nchar(Word)-3,nchar(Word))),c("CHES"))) #stretches, matches
-      numSyl=numSyl+1 
-      
-      if(is.element(toupper(substr(Word,nchar(Word)-2,nchar(Word))),c("IER")) && is.element(toupper(substr(entry, nchar(entry), nchar(entry))), c("Y")))
-      numSyl=numSyl+1 
-	}
-	
-	if(tolower(entry)!=tolower(Word))
-	print("ENTRY AND WORD DO NOT MATCH!!!!!")
-	
-    print(paste("Word:", Word, "|  Entry:", entry))
-    print(paste("numSyl:", numSyl,  "|  Stress:", Stress))
-    
-    closeAllConnections()
-	return(c(numSyl, Stress))
-	
+  return(sAsBRIT(Word = Word, type = type, country = "us"))
 }
 
-extract_info <- function(data) {
-  # Extract word (removing the part of speech if attached)
-  word_part <- str_extract(data[1], "^\\w+")
-  part_of_speech <- str_extract(data[1], "(verb|noun|adjective|adverb)")
-  
-  # Remove part of speech from the word if attached
-  word <- str_remove(word_part, part_of_speech)
-  
-  # Extract country
-  country_us <- ifelse(str_detect(data[1], "us"), "us", NA)
-  country_uk <- ifelse(str_detect(data[6], "uk"), "uk", NA)
-  
-  # Extract first phonetic spelling from US and UK (handling multiple phonetics)
-  phonetic_us <- str_extract(data[6], "/.+?/")
-  phonetic_uk <- str_extract(data[11], "/.+?/")
-  
-  # Split the phonetic spelling if it has a comma and extract only the first one
-  phonetic_us <- str_split(phonetic_us, ",")[[1]][1] %>% str_trim()
-  phonetic_uk <- str_split(phonetic_uk, ",")[[1]][1] %>% str_trim()
-  
-  # Create a result list
-  result <- c(
-    word = word,
-    part_of_speech = part_of_speech,
-    country_us = country_us,
-    phonetic_us = phonetic_us,
-    country_uk = country_uk,
-    phonetic_uk = phonetic_uk
-  )
-  
-  return(result)
-}
+
+# Webster dictionary is irregular now ... 
+# sAsENG= function(Word, type)
+# {
+# 	url=paste("https://www.merriam-webster.com/dictionary/",tolower(Word), sep="")
+# 	html= readUrl(url)  #try catch 
+# 	if(typeof(html)=="double") #check if word exists
+# 	{
+# 		return(NA)
+# 	}
+# 	entry= html %>% html_nodes(".hword ") %>% html_text() %>% strsplit(split="\n")%>% unlist()
+# 	entry=entry[1]
+# 	
+# 	if(length(unlist(tokenize_words(entry)))>1) # angeles returning East Los Angeles
+# 	{
+# 		return(NA)
+# 	}
+# 	    	
+# 	#find html portion which contains all word part of speeches for the dictionary
+# 	cleanPos= html %>% html_nodes(".parts-of-speech") %>% html_text(trim = T) %>% strsplit(split="\n")%>% unlist()
+# 	
+# 	#clean the string
+# 	POS=0
+# 	if(!is.null(cleanPos))
+# 	{
+# 		POS= cleanPOS(cleanPos, entry) 
+# 	}
+# 
+# 	#find html portion with all associated pronounciations 
+# 	cleanPron= html %>% html_nodes(".play-pron-v2") %>% html_text(trim = T) %>% strsplit(split="\n")%>% unlist()
+# 	cleanPron = cleanPron[1:length(POS)]
+# 	
+# 	# PRON= cleanPRON(cleanPron)
+# 	PRON = cleanPron
+# 	if((is.na(PRON[1]) ||is.null(PRON[1]) ) && (sum(POS=="abbreviation")==0)){ #no pronounciation given and NOT abbreviation   #will get first entry from cambridge dictionary, planB
+# 		print("Calling Cambridge dictionary because phonetic spelling was not given")
+# 		return(sAsBRIT(Word, type))
+# 		}
+# 	
+# 	loc=1
+# 	wordType= initialPat(type)
+# 	if(!identical(POS, 0))
+# 	{
+# 	found=FALSE
+# 	i=1
+# 	if(length(wordType)>1)
+# 	{
+# 		while(!found && i<=length(wordType))
+# 		{
+# 			loc= which(POS==wordType[i])
+# 			if(length(loc)>0)
+# 				found=TRUE
+# 			else
+# 				i=i+1	
+# 		}
+# 	}
+# 	if(length(wordType)>1 && found==FALSE)
+# 	{
+# 		return(NA)
+# 	}
+# 	
+# 	loc= which(POS==wordType[i])
+# 	}
+# 
+# 	
+# 	
+# 	if(length(loc)>1)
+# 		loc=loc[1]
+# 	if(length(loc)==0 && sum(POS=="abbreviation")>=1) #put here to check for abbreviation in case abbreviation can be both a word and an abbreviation
+# 		return("abb")
+# 	if(length(loc)==0 && length(PRON)!=0)
+# 		loc=1
+# 	if(loc>length(PRON)) #if there isnt a pronounciation for the POS
+# 		loc=1
+# 	#proper phonetic spelling to find info from
+# 	decodeStr= PRON[loc]
+# 	
+# 	# if no phonetic string, just take the first one.  This happened for the word 
+# 	# found, the verb did not have pronunciation.  
+# 	if(is.na(decodeStr))
+# 	{
+# 	  decodeStr = PRON[1]
+# 	}
+# 	
+# 	also=unlist(gregexpr("also",decodeStr)) #account for 2 pronounciations in phonetic spelling
+# 	if(also!=-1)
+# 	{
+# 		decodeStr= substr(decodeStr,1, also-1)
+# 	}
+# 	
+# 	## Address "couple" and "family". 
+# 	
+# 	colonLocs = regexpr(";", decodeStr) 
+# 	if(colonLocs[1]!=-1)
+# 	{
+# 		decodeStr = substr(decodeStr, 1, colonLocs[1]-1)
+# 		decodeStr = trimws(decodeStr)
+# 	}
+# 	
+# 	##
+# 	
+# 	
+# 	numSyl= str_count(decodeStr, "-")+1
+# 	p1=unlist(gregexpr("-​)", decodeStr))[1]
+# 	p2=unlist(gregexpr("(-", decodeStr, fixed=TRUE))[1]
+# 	if(p1!=-1 ||p2!=-1 ) # case with (e-) in phonetic spelling
+# 	{
+# 		if(p1==-1)
+# 		p1=NULL
+# 		if(p2==-1)
+# 		p2=NULL
+# 		
+# 		numSyl=numSyl-length(p1)-length(p2)
+# 	}
+# 	stressPos= unlist(gregexpr("ˈ",decodeStr))
+#  	substrB4Stress=substr(decodeStr, 1,stressPos)
+#  	numDashB4=unlist(gregexpr("-", substrB4Stress))
+#  	
+#  	if(numDashB4[1]==-1){
+#  		numDashB4=0
+#  		
+#  	}else{
+#  		numDashB4=length(numDashB4)
+#  	}
+#  		
+#  	Stress= numDashB4+1
+# 
+# #####################################
+# #check if word and entry are the same
+# #####################################
+# 	
+# 	if(Word!=entry)
+# 	{
+#      if (is.element(toupper(substr(Word,nchar(Word)-2,nchar(Word))),c("TED","DED", "FUL", "ING"))) #escalated, suspected, decided, suspenseful
+#       numSyl=numSyl+1
+#       
+#         if (is.element(toupper(substr(Word,nchar(Word)-3,nchar(Word))),c("CHES"))) #stretches, matches
+#       numSyl=numSyl+1 
+#       
+#       if(is.element(toupper(substr(Word,nchar(Word)-2,nchar(Word))),c("IER")) && is.element(toupper(substr(entry, nchar(entry), nchar(entry))), c("Y")))
+#       numSyl=numSyl+1 
+# 	}
+# 	
+# 	if(tolower(entry)!=tolower(Word))
+# 	print("ENTRY AND WORD DO NOT MATCH!!!!!")
+# 	
+#     print(paste("Word:", Word, "|  Entry:", entry))
+#     print(paste("numSyl:", numSyl,  "|  Stress:", Stress))
+#     
+#     closeAllConnections()
+# 	return(c(numSyl, Stress))
+# 	
+# }
+# 
+# extract_info <- function(data) {
+#   # Extract word (removing the part of speech if attached)
+#   word_part <- str_extract(data[1], "^\\w+")
+#   part_of_speech <- str_extract(data[1], "(verb|noun|adjective|adverb)")
+#   
+#   # Remove part of speech from the word if attached
+#   word <- str_remove(word_part, part_of_speech)
+#   
+#   # Extract country
+#   country_us <- ifelse(str_detect(data[1], "us"), "us", NA)
+#   country_uk <- ifelse(str_detect(data[6], "uk"), "uk", NA)
+#   
+#   # Extract first phonetic spelling from US and UK (handling multiple phonetics)
+#   phonetic_us <- str_extract(data[6], "/.+?/")
+#   phonetic_uk <- str_extract(data[11], "/.+?/")
+#   
+#   # Split the phonetic spelling if it has a comma and extract only the first one
+#   phonetic_us <- str_split(phonetic_us, ",")[[1]][1] %>% str_trim()
+#   phonetic_uk <- str_split(phonetic_uk, ",")[[1]][1] %>% str_trim()
+#   
+#   # Create a result list
+#   result <- c(
+#     word = word,
+#     part_of_speech = part_of_speech,
+#     country_us = country_us,
+#     phonetic_us = phonetic_us,
+#     country_uk = country_uk,
+#     phonetic_uk = phonetic_uk
+#   )
+#   
+#   return(result)
+# }
 
 
 cleanBrit= function(Array, Word){
@@ -422,7 +430,7 @@ cleanBrit= function(Array, Word){
 }
 
 
-sAsBRIT= function(Word, type)
+sAsBRIT= function(Word, type, country = "uk")
 {
 	url=paste("https://dictionary.cambridge.org/us/dictionary/english/",tolower(Word), sep="")
 	html= readUrl(url) #try catch 
@@ -458,13 +466,25 @@ sAsBRIT= function(Word, type)
 		cleanScript[[i]]=extract_info(cleanScript[[i]])
 	}
 	
-	
-
-	# remove those that dont have uk phonetic spelling 
-	cleanScript = cleanScript[-which(is.na(sapply(cleanScript, "[[",6)))]
-	
-	# only keep relevant entries
-	cleanScript = lapply(cleanScript, FUN = function(x) {return(x[c(1,2,5,6)])})
+	if(country == "uk")
+	{
+	  # remove those that dont have uk phonetic spelling 
+	  rm_index = which(is.na(sapply(cleanScript, "[[",6)))
+	  if(length(rm_index) > 0)
+	  cleanScript = cleanScript[-which(is.na(sapply(cleanScript, "[[",6)))]
+	  
+	  # only keep relevant entries
+	  cleanScript = lapply(cleanScript, FUN = function(x) {return(x[c(1,2,5,6)])}) 
+	}else
+	{
+	  # remove those that dont have uk phonetic spelling 
+	  rm_index = which(is.na(sapply(cleanScript, "[[",4)))
+	  if(length(rm_index) > 0)
+	  cleanScript = cleanScript[-which(is.na(sapply(cleanScript, "[[",4)))]
+	  
+	  # only keep relevant entries
+	  cleanScript = lapply(cleanScript, FUN = function(x) {return(x[c(1,2,3,4)])})
+	}
 	
 	
 	pos=type
@@ -474,21 +494,25 @@ sAsBRIT= function(Word, type)
 	pronTruth= vector("numeric", length(cleanScript))	
 	for(i in 1: length(cleanScript))
 	{
-		if(!is.na(cleanScript[[i]][2]))
-		{
-			if(is.element(cleanScript[[i]][2], type))
-			{
-				posTruth[i]=1
-			}
-			if(cleanScript[[i]][3]=="uk")
-			{
-				ukTruth[i]= 1
-			}
-			if(!is.na(cleanScript[[i]][4]) && cleanScript[[i]][4]!="")
-			{
-				pronTruth[i]= 1
-			}
-		}
+	  if(!is.na(cleanScript[[i]][2]))
+	  {
+	    if(is.element(cleanScript[[i]][2], type))
+	    {
+	      posTruth[i]=1
+	    }
+	  }
+	  if(!is.na(cleanScript[[i]][3]))
+	  {
+	    if(cleanScript[[i]][3]== country)
+	    {
+	      ukTruth[i]= 1
+	    }
+	  }
+	  if(!is.na(cleanScript[[i]][4]) && cleanScript[[i]][4]!="")
+	  {
+	    pronTruth[i]= 1
+	  }
+	  
 	}
 	totTruth=ukTruth + posTruth+pronTruth
 	
@@ -498,7 +522,7 @@ sAsBRIT= function(Word, type)
 		return(sAsBRITBackUp(Word, pos))
 	}
 	#look for entry with proper part of speech and uk 
-	index= which(totTruth==3)[1]
+	index= which.max(totTruth)[1]
 	#if cant find entry with both uk
 	if(is.na(index[1]))
 	{

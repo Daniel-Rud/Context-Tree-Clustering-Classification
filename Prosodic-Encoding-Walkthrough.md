@@ -33,15 +33,19 @@ active python environment.
 
 A prerequisite to applying the Prosodic encoding algorithm is to know
 both the number of syllables and the location of a word’s stressed
-syllable for all words in a text. To do this, we implemented a
-web-scraping algorithm provided in the file *DictionaryExtractionV2.R*,
-where the functions `sAsENG` and `sAsBRIT` (sAs = stress AND syllables)
-are used to web-scrape the Merriam Webster and Cambridge dictionaries
-respectively. The two functions `sAsENG` and `sAsBRIT` require that the
-user specify the part of speech a particular word pertains to. In order
-to find the part of speech of a particular word in a sentence, we
-leverage the `spaCyr` package that uses NLP models to identify parts of
-speeches of tokenized words within sentences.
+syllable for all words in a text. To do this, we originally implemented
+a web-scraping algorithm provided in the file
+*DictionaryExtractionV2.R*, where the functions `sAsENG` and `sAsBRIT`
+(sAs = stress AND syllables) were used to web-scrape the Merriam Webster
+and Cambridge dictionaries respectively. However, due to recent changes
+in the web format of the Merriam Webster dictionary, I have augmented
+the function `sAsENG` to instead extract the United States English
+pronunciation from the Cambridge dictionary (which is provided). The two
+functions `sAsENG` and `sAsBRIT` require that the user specify the part
+of speech a particular word pertains to. In order to find the part of
+speech of a particular word in a sentence, we leverage the `spaCyr`
+package that uses NLP models to identify parts of speeches of tokenized
+words within sentences.
 
 For illustration, given the word “garage” and its part of speech “noun”,
 the “stress AND syllables” can be found with the following call:
@@ -74,69 +78,64 @@ Classification and Clustering*.
     Phonological_Encoding = function(input_file, output_file = "", dictionary_type = c("Webster", "Cambridge"), elements = c("the", "a", "at")) {
       
       # Parse_Token function: Determines the prosodic encoding of a word based on its syllables, stress, and whether it begins a prosodic word
-      Parse_Token <- function(Word, Num_Sil, Stressed_syllable, Output_file, Phonetic_word) {       
-        prosodyString = ""
-        
-        # If the word has syllables
-        if (Num_Sil > 0) {
-          
-          # Special case for one-syllable words
-          if (Num_Sil == 1) {
+      Parse_Token <- function(Word, Num_Sil,Stressed_syllable,Output_file,Phonetic_word)
+    {       
+        prosodyString= ""
+         if (Num_Sil > 0) # fix to >
+         {
+                if (Num_Sil == 1)
+            {   #### Check if HER and IT, YOU are object or subject pronoums : also look for This That (No one)
+                if (is.element(toupper(Word), c("ME", "US", "THEM", "HIM", "HER", "YOU", "IT", "A", "AN","OF", "THE"))) #, "FOR", "NOR", "BUT", "OR", "YET", "SO"))) #### One syllable and these are non-stressed pronouns that join main prosodic words
+                #ARE ALL ONE SYLLABLE CONJUNCTIONS PART OF THIS??????
+                {
+                    if (Phonetic_word == 1) ## This means it is the beginning of a prosodic word, so it is a 2
+                    { 
+                        prosodyString="2 "
+                        Phonetic_word <- 0
+                    } else ## middle of prosodic word, so a 0
+                        prosodyString="0 "              
+                } 
+                else
+                {
+                    if (Phonetic_word == 1) ## This means it is the beginning of a prosodic word, so it is a 2
+                    { 
+                       prosodyString= "3 " 
+                        #Phonetic_word <- 0. not correct, because we know this word was a prosodic word itself, so move to next
+                    } else ## middle of prosodic word, so a 0
+                        prosodyString="1 " # for me 
+                        Phonetic_word=1
+                    
+                }
+                
             
-            # Check if the word is one of the unstressed pronouns or determiners in the elements list
-            if (is.element(toupper(Word), elements)) {
-              
-              # If it is the beginning of a prosodic word, assign 2
-              if (Phonetic_word == 1) { 
-                prosodyString = "2 "
-                Phonetic_word <- 0
-              } else { 
-                prosodyString = "0 " # Middle of prosodic word, assign 0
-              }
-              
-            } else { 
-              
-              # Not in the elements list; assign a different encoding
-              if (Phonetic_word == 1) { 
-                prosodyString = "3 " # Beginning of prosodic word, assign 3
-              } else { 
-                prosodyString = "1 " # Middle of prosodic word, assign 1
+            }else 
+            {
+                prosodyString= ""
+                for(i in 1: Num_Sil)
+                {
+                    if ((Stressed_syllable == i) && (Phonetic_word == 1) && i==1)
+                         {
+                            prosodyString= paste(prosodyString, "3 ", sep="")
+                            Phonetic_word = 0
+                            }
+                    else if ((Stressed_syllable == i) && (Phonetic_word == 0))
+                        prosodyString= paste(prosodyString, "1 ", sep="")
+                    else if ((Stressed_syllable != i) && (Phonetic_word == 1))
+                    {
+                        prosodyString= paste(prosodyString, "2 ", sep="")
+                        Phonetic_word = 0
+                    }
+                    else if ((Stressed_syllable != i) && (Phonetic_word == 0))
+                        prosodyString= paste(prosodyString, "0 ", sep="")
+                }
                 Phonetic_word = 1
-              }
-            }
+            }   
             
-          } else {
-            # Case for words with more than one syllable
-            prosodyString = ""
-            
-            for(i in 1: Num_Sil) {
-              # If the syllable is stressed and starts a prosodic word, assign 3
-              if ((Stressed_syllable == i) && (Phonetic_word == 1) && i == 1) {
-                prosodyString = paste(prosodyString, "3 ", sep="")
-                Phonetic_word = 0
-                
-                # If the syllable is stressed but not starting a prosodic word, assign 1
-              } else if ((Stressed_syllable == i) && (Phonetic_word == 0)) {
-                prosodyString = paste(prosodyString, "1 ", sep="")
-                
-                # If the syllable is not stressed but starts a prosodic word, assign 2
-              } else if ((Stressed_syllable != i) && (Phonetic_word == 1)) {
-                prosodyString = paste(prosodyString, "2 ", sep="")
-                Phonetic_word = 0
-                
-                # Unstressed syllables within a prosodic word are assigned 0
-              } else if ((Stressed_syllable != i) && (Phonetic_word == 0)) {
-                prosodyString = paste(prosodyString, "0 ", sep="")
-              }
-            }
-            Phonetic_word = 1
-          }    
         }
         
-        # Write prosodic encoding to the output file and return values
-        cat(prosodyString, file = Output_file, append = TRUE) 
+        cat(prosodyString ,file=Output_file, append=TRUE) 
         return(c(Phonetic_word, prosodyString))
-      }
+     }
       
       ##################################################################################################
       ##################################################################################################
@@ -290,7 +289,7 @@ Classification and Clustering*.
 To showcase the function, let us first create a txt file containing two
 sentences.
 
-    text = "The man went to the store.  He later went for a walk."
+    text = "The woman walked to the store."
     write(text, file = "sample_text.txt")
 
 Now, let us apply the prosodic encoding function
@@ -313,7 +312,7 @@ encoding of the text.
 
     output_file_text
 
-    ## [1] "3 3 3 3 3 3 0 0 4 3 3 0 3 3 3 3 4 "
+    ## [1] "2 1 0 3 3 2 1 4 "
 
 The `sample_text_log.txt` file will contain the log of the number of
 syllables and stress of each word, and the corresponding phonological
@@ -325,58 +324,30 @@ encoding.
 
     ##  [1] "[1] \"Word: the |  Entry: the\""                                             
     ##  [2] "[1] \"numSyl: 1 |  Stress: 1\""                                              
-    ##  [3] "[1] \"Prosodic encoding for 'the' is: 3 .  Phonetic Word= 1\""               
+    ##  [3] "[1] \"Prosodic encoding for 'the' is: 2 .  Phonetic Word= 0\""               
     ##  [4] "[1] \"--------------------------------------------------------------------\""
-    ##  [5] "[1] \"Word: man |  Entry: man\""                                             
-    ##  [6] "[1] \"numSyl: 1 |  Stress: 1\""                                              
-    ##  [7] "[1] \"Prosodic encoding for 'man' is: 3 .  Phonetic Word= 1\""               
+    ##  [5] "[1] \"Word: woman |  Entry: woman\""                                         
+    ##  [6] "[1] \"numSyl: 2 |  Stress: 1\""                                              
+    ##  [7] "[1] \"Prosodic encoding for 'woman' is: 1 0 .  Phonetic Word= 1\""           
     ##  [8] "[1] \"--------------------------------------------------------------------\""
-    ##  [9] "[1] \"Calling Cambridge dictionary because phonetic spelling was not given\""
-    ## [10] "[1] \"Word: went |  Entry: went\""                                           
-    ## [11] "[1] \"numSyl: 1 |  Stress: 1\""                                              
-    ## [12] "[1] \"Prosodic encoding for 'went' is: 3 .  Phonetic Word= 1\""              
-    ## [13] "[1] \"--------------------------------------------------------------------\""
-    ## [14] "[1] \"Word: to |  Entry: to\""                                               
-    ## [15] "[1] \"numSyl: 1 |  Stress: 1\""                                              
-    ## [16] "[1] \"Prosodic encoding for 'to' is: 3 .  Phonetic Word= 1\""                
-    ## [17] "[1] \"--------------------------------------------------------------------\""
-    ## [18] "[1] \"Word: the |  Entry: the\""                                             
-    ## [19] "[1] \"numSyl: 1 |  Stress: 1\""                                              
-    ## [20] "[1] \"Prosodic encoding for 'the' is: 3 .  Phonetic Word= 1\""               
-    ## [21] "[1] \"--------------------------------------------------------------------\""
-    ## [22] "[1] \"Word: store |  Entry: store\""                                         
-    ## [23] "[1] \"numSyl: 3 |  Stress: 1\""                                              
-    ## [24] "[1] \"Prosodic encoding for 'store' is: 3 0 0 .  Phonetic Word= 1\""         
-    ## [25] "[1] \"--------------------------------------------------------------------\""
-    ## [26] "[1] \"Prosodic encoding for '.' is: 4.  Phonetic Word= 1\""                  
-    ## [27] "[1] \"--------------------------------------------------------------------\""
-    ## [28] "[1] \"Word: he |  Entry: he\""                                               
-    ## [29] "[1] \"numSyl: 1 |  Stress: 1\""                                              
-    ## [30] "[1] \"Prosodic encoding for 'he' is: 3 .  Phonetic Word= 1\""                
-    ## [31] "[1] \"--------------------------------------------------------------------\""
-    ## [32] "[1] \"Word: later |  Entry: later\""                                         
-    ## [33] "[1] \"numSyl: 2 |  Stress: 1\""                                              
-    ## [34] "[1] \"Prosodic encoding for 'later' is: 3 0 .  Phonetic Word= 1\""           
-    ## [35] "[1] \"--------------------------------------------------------------------\""
-    ## [36] "[1] \"Calling Cambridge dictionary because phonetic spelling was not given\""
-    ## [37] "[1] \"Word: went |  Entry: went\""                                           
-    ## [38] "[1] \"numSyl: 1 |  Stress: 1\""                                              
-    ## [39] "[1] \"Prosodic encoding for 'went' is: 3 .  Phonetic Word= 1\""              
-    ## [40] "[1] \"--------------------------------------------------------------------\""
-    ## [41] "[1] \"Word: for |  Entry: for\""                                             
-    ## [42] "[1] \"numSyl: 1 |  Stress: 1\""                                              
-    ## [43] "[1] \"Prosodic encoding for 'for' is: 3 .  Phonetic Word= 1\""               
-    ## [44] "[1] \"--------------------------------------------------------------------\""
-    ## [45] "[1] \"Word: a |  Entry: a\""                                                 
-    ## [46] "[1] \"numSyl: 1 |  Stress: 1\""                                              
-    ## [47] "[1] \"Prosodic encoding for 'a' is: 3 .  Phonetic Word= 1\""                 
-    ## [48] "[1] \"--------------------------------------------------------------------\""
-    ## [49] "[1] \"Word: walk |  Entry: walk\""                                           
-    ## [50] "[1] \"numSyl: 1 |  Stress: 1\""                                              
-    ## [51] "[1] \"Prosodic encoding for 'walk' is: 3 .  Phonetic Word= 1\""              
-    ## [52] "[1] \"--------------------------------------------------------------------\""
-    ## [53] "[1] \"Prosodic encoding for '.' is: 4.  Phonetic Word= 1\""                  
-    ## [54] "[1] \"--------------------------------------------------------------------\""
+    ##  [9] "[1] \"Word: walked |  Entry: walked\""                                       
+    ## [10] "[1] \"numSyl: 1 |  Stress: 1\""                                              
+    ## [11] "[1] \"Prosodic encoding for 'walked' is: 3 .  Phonetic Word= 1\""            
+    ## [12] "[1] \"--------------------------------------------------------------------\""
+    ## [13] "[1] \"Word: to |  Entry: to\""                                               
+    ## [14] "[1] \"numSyl: 1 |  Stress: 1\""                                              
+    ## [15] "[1] \"Prosodic encoding for 'to' is: 3 .  Phonetic Word= 1\""                
+    ## [16] "[1] \"--------------------------------------------------------------------\""
+    ## [17] "[1] \"Word: the |  Entry: the\""                                             
+    ## [18] "[1] \"numSyl: 1 |  Stress: 1\""                                              
+    ## [19] "[1] \"Prosodic encoding for 'the' is: 2 .  Phonetic Word= 0\""               
+    ## [20] "[1] \"--------------------------------------------------------------------\""
+    ## [21] "[1] \"Word: store |  Entry: store\""                                         
+    ## [22] "[1] \"numSyl: 1 |  Stress: 1\""                                              
+    ## [23] "[1] \"Prosodic encoding for 'store' is: 1 .  Phonetic Word= 1\""             
+    ## [24] "[1] \"--------------------------------------------------------------------\""
+    ## [25] "[1] \"Prosodic encoding for '.' is: 4.  Phonetic Word= 1\""                  
+    ## [26] "[1] \"--------------------------------------------------------------------\""
 
 ## Full disclaimer
 
