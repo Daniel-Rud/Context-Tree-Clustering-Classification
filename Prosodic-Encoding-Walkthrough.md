@@ -78,64 +78,95 @@ Classification and Clustering*.
     Phonological_Encoding = function(input_file, output_file = "", dictionary_type = c("Webster", "Cambridge"), elements = c("the", "a", "at")) {
       
       # Parse_Token function: Determines the prosodic encoding of a word based on its syllables, stress, and whether it begins a prosodic word
-      Parse_Token <- function(Word, Num_Sil,Stressed_syllable,Output_file,Phonetic_word)
+     Parse_Token <- function(Word, Num_Sil, Stressed_syllable, Output_file, Phonetic_word)
     {       
-        prosodyString= ""
-         if (Num_Sil > 0) # fix to >
-         {
-                if (Num_Sil == 1)
-            {   #### Check if HER and IT, YOU are object or subject pronoums : also look for This That (No one)
-                if (is.element(toupper(Word), c("ME", "US", "THEM", "HIM", "HER", "YOU", "IT", "A", "AN","OF", "THE"))) #, "FOR", "NOR", "BUT", "OR", "YET", "SO"))) #### One syllable and these are non-stressed pronouns that join main prosodic words
-                #ARE ALL ONE SYLLABLE CONJUNCTIONS PART OF THIS??????
+        # Initialize an empty string to hold the prosodic encoding for the word
+        prosodyString = ""
+        
+        # Proceed only if the word has one or more syllables
+        if (Num_Sil > 0) # Ensure Num_Sil is positive
+        {
+            # Special case for words with exactly one syllable
+            if (Num_Sil == 1)
+            {   
+                #### Check if the word is a non-stressed pronoun or determiner ####
+                if (is.element(toupper(Word), c("ME", "US", "THEM", "HIM", "HER", "YOU", "IT", "A", "AN", "OF", "THE", "FOR"))) 
                 {
-                    if (Phonetic_word == 1) ## This means it is the beginning of a prosodic word, so it is a 2
+                    # Check if this is the beginning of a prosodic word
+                    if (Phonetic_word == 1) 
                     { 
-                        prosodyString="2 "
-                        Phonetic_word <- 0
-                    } else ## middle of prosodic word, so a 0
-                        prosodyString="0 "              
+                        # Assign prosody code 2 (indicates start of a prosodic word)
+                        prosodyString = "2 "
+                        Phonetic_word <- 0 # Reset Phonetic_word flag
+                    } 
+                    else 
+                    {
+                        # Assign prosody code 0 (indicates middle of a prosodic word)
+                        prosodyString = "0 "                
+                    } 
                 } 
+                # Case for one-syllable word that is not a non-stressed pronoun/determiner
                 else
                 {
-                    if (Phonetic_word == 1) ## This means it is the beginning of a prosodic word, so it is a 2
+                    # Check if this is the beginning of a prosodic word
+                    if (Phonetic_word == 1) 
                     { 
-                       prosodyString= "3 " 
-                        #Phonetic_word <- 0. not correct, because we know this word was a prosodic word itself, so move to next
-                    } else ## middle of prosodic word, so a 0
-                        prosodyString="1 " # for me 
-                        Phonetic_word=1
-                    
+                        # Assign prosody code 3 (indicates stressed prosodic word)
+                        prosodyString = "3 " 
+                    } 
+                    else 
+                    {
+                        # Assign prosody code 1 (stressed syllable in middle of prosodic word)
+                        prosodyString = "1 " 
+                        Phonetic_word = 1 # Update Phonetic_word to indicate this word was prosodic
+                    }   
                 }
-                
-            
-            }else 
+            } 
+            # Case for multi-syllable words
+            else 
             {
-                prosodyString= ""
-                for(i in 1: Num_Sil)
+                prosodyString = "" # Initialize/clear the prosody string
+                # Loop through each syllable in the word
+                for (i in 1: Num_Sil)
                 {
-                    if ((Stressed_syllable == i) && (Phonetic_word == 1) && i==1)
-                         {
-                            prosodyString= paste(prosodyString, "3 ", sep="")
-                            Phonetic_word = 0
-                            }
+                    # If current syllable is stressed and it's the first syllable in the prosodic word
+                    if ((Stressed_syllable == i) && (Phonetic_word == 1) && i == 1)
+                    {
+                        # Assign prosody code 3 (stressed first syllable in prosodic word)
+                        prosodyString = paste(prosodyString, "3 ", sep = "")
+                        Phonetic_word = 0 # Reset Phonetic_word flag
+                    }
+                    # If current syllable is stressed but not the first syllable in the prosodic word
                     else if ((Stressed_syllable == i) && (Phonetic_word == 0))
-                        prosodyString= paste(prosodyString, "1 ", sep="")
+                    {
+                        # Assign prosody code 1 (stressed syllable in middle of prosodic word)
+                        prosodyString = paste(prosodyString, "1 ", sep = "")
+                    }
+                    # If current syllable is not stressed and it's the first syllable in the prosodic word
                     else if ((Stressed_syllable != i) && (Phonetic_word == 1))
                     {
-                        prosodyString= paste(prosodyString, "2 ", sep="")
-                        Phonetic_word = 0
+                        # Assign prosody code 2 (unstressed first syllable in prosodic word)
+                        prosodyString = paste(prosodyString, "2 ", sep = "")
+                        Phonetic_word = 0 # Reset Phonetic_word flag
                     }
+                    # If current syllable is not stressed and not the first syllable in the prosodic word
                     else if ((Stressed_syllable != i) && (Phonetic_word == 0))
-                        prosodyString= paste(prosodyString, "0 ", sep="")
+                    {
+                        # Assign prosody code 0 (unstressed syllable in middle of prosodic word)
+                        prosodyString = paste(prosodyString, "0 ", sep = "")
+                    }
                 }
-                Phonetic_word = 1
+                Phonetic_word = 1 # Reset Phonetic_word flag for the next word
             }   
-            
         }
         
-        cat(prosodyString ,file=Output_file, append=TRUE) 
+        # Write the prosody string to the output file and append it
+        cat(prosodyString, file = Output_file, append = TRUE) 
+        
+        # Return the updated Phonetic_word flag and the prosody string
         return(c(Phonetic_word, prosodyString))
-     }
+    }
+
       
       ##################################################################################################
       ##################################################################################################
@@ -289,7 +320,7 @@ Classification and Clustering*.
 To showcase the function, let us first create a txt file containing two
 sentences.
 
-    text = "The woman walked to the store."
+    text = "Police are hunting for answers on what caused an explosion that injured twenty nine people in New York's Chelsea neighborhood shortly before a second suspicious device was found nearby."
     write(text, file = "sample_text.txt")
 
 Now, let us apply the prosodic encoding function
@@ -312,7 +343,7 @@ encoding of the text.
 
     output_file_text
 
-    ## [1] "2 1 0 3 3 2 1 4 "
+    ## [1] "2 1 3 3 0 2 1 0 3 3 3 2 0 1 0 3 3 0 3 0 3 3 0 3 3 3 3 0 3 0 0 3 0 2 1 2 1 0 2 1 0 2 1 3 3 2 1 4 "
 
 The `sample_text_log.txt` file will contain the log of the number of
 syllables and stress of each word, and the corresponding phonological
@@ -322,32 +353,128 @@ encoding.
 
     output_log_file_text
 
-    ##  [1] "[1] \"Word: the |  Entry: the\""                                             
-    ##  [2] "[1] \"numSyl: 1 |  Stress: 1\""                                              
-    ##  [3] "[1] \"Prosodic encoding for 'the' is: 2 .  Phonetic Word= 0\""               
-    ##  [4] "[1] \"--------------------------------------------------------------------\""
-    ##  [5] "[1] \"Word: woman |  Entry: woman\""                                         
-    ##  [6] "[1] \"numSyl: 2 |  Stress: 1\""                                              
-    ##  [7] "[1] \"Prosodic encoding for 'woman' is: 1 0 .  Phonetic Word= 1\""           
-    ##  [8] "[1] \"--------------------------------------------------------------------\""
-    ##  [9] "[1] \"Word: walked |  Entry: walked\""                                       
-    ## [10] "[1] \"numSyl: 1 |  Stress: 1\""                                              
-    ## [11] "[1] \"Prosodic encoding for 'walked' is: 3 .  Phonetic Word= 1\""            
-    ## [12] "[1] \"--------------------------------------------------------------------\""
-    ## [13] "[1] \"Word: to |  Entry: to\""                                               
-    ## [14] "[1] \"numSyl: 1 |  Stress: 1\""                                              
-    ## [15] "[1] \"Prosodic encoding for 'to' is: 3 .  Phonetic Word= 1\""                
-    ## [16] "[1] \"--------------------------------------------------------------------\""
-    ## [17] "[1] \"Word: the |  Entry: the\""                                             
-    ## [18] "[1] \"numSyl: 1 |  Stress: 1\""                                              
-    ## [19] "[1] \"Prosodic encoding for 'the' is: 2 .  Phonetic Word= 0\""               
-    ## [20] "[1] \"--------------------------------------------------------------------\""
-    ## [21] "[1] \"Word: store |  Entry: store\""                                         
-    ## [22] "[1] \"numSyl: 1 |  Stress: 1\""                                              
-    ## [23] "[1] \"Prosodic encoding for 'store' is: 1 .  Phonetic Word= 1\""             
-    ## [24] "[1] \"--------------------------------------------------------------------\""
-    ## [25] "[1] \"Prosodic encoding for '.' is: 4.  Phonetic Word= 1\""                  
-    ## [26] "[1] \"--------------------------------------------------------------------\""
+    ##   [1] "[1] \"Word: police |  Entry: police\""                                                                                          
+    ##   [2] "[1] \"numSyl: 2 |  Stress: 2\""                                                                                                 
+    ##   [3] "[1] \"Prosodic encoding for 'police' is: 2 1 .  Phonetic Word= 1\""                                                             
+    ##   [4] "[1] \"--------------------------------------------------------------------\""                                                   
+    ##   [5] "[1] \"Word: are |  Entry: are\""                                                                                                
+    ##   [6] "[1] \"numSyl: 1 |  Stress: 1\""                                                                                                 
+    ##   [7] "[1] \"Prosodic encoding for 'are' is: 3 .  Phonetic Word= 1\""                                                                  
+    ##   [8] "[1] \"--------------------------------------------------------------------\""                                                   
+    ##   [9] "[1] \"Word: hunting |  Entry: hunting\""                                                                                        
+    ##  [10] "[1] \"numSyl: 2 |  Stress: 1\""                                                                                                 
+    ##  [11] "[1] \"Prosodic encoding for 'hunting' is: 3 0 .  Phonetic Word= 1\""                                                            
+    ##  [12] "[1] \"--------------------------------------------------------------------\""                                                   
+    ##  [13] "[1] \"Word: for |  Entry: for\""                                                                                                
+    ##  [14] "[1] \"numSyl: 1 |  Stress: 1\""                                                                                                 
+    ##  [15] "[1] \"Prosodic encoding for 'for' is: 2 .  Phonetic Word= 0\""                                                                  
+    ##  [16] "[1] \"--------------------------------------------------------------------\""                                                   
+    ##  [17] "[1] \"ENTRY AND WORD DO NOT MATCH!!!!! \""                                                                                      
+    ##  [18] "[1] \"Word: answers |  Entry: answer\""                                                                                         
+    ##  [19] "[1] \"numSyl: 2 |  Stress: 1\""                                                                                                 
+    ##  [20] "[1] \"Prosodic encoding for 'answers' is: 1 0 .  Phonetic Word= 1\""                                                            
+    ##  [21] "[1] \"--------------------------------------------------------------------\""                                                   
+    ##  [22] "[1] \"Word: on |  Entry: on\""                                                                                                  
+    ##  [23] "[1] \"numSyl: 1 |  Stress: 1\""                                                                                                 
+    ##  [24] "[1] \"Prosodic encoding for 'on' is: 3 .  Phonetic Word= 1\""                                                                   
+    ##  [25] "[1] \"--------------------------------------------------------------------\""                                                   
+    ##  [26] "[1] \"Word: what |  Entry: what\""                                                                                              
+    ##  [27] "[1] \"numSyl: 1 |  Stress: 1\""                                                                                                 
+    ##  [28] "[1] \"Prosodic encoding for 'what' is: 3 .  Phonetic Word= 1\""                                                                 
+    ##  [29] "[1] \"--------------------------------------------------------------------\""                                                   
+    ##  [30] "[1] \"Word: caused |  Entry: caused\""                                                                                          
+    ##  [31] "[1] \"numSyl: 1 |  Stress: 1\""                                                                                                 
+    ##  [32] "[1] \"Prosodic encoding for 'caused' is: 3 .  Phonetic Word= 1\""                                                               
+    ##  [33] "[1] \"--------------------------------------------------------------------\""                                                   
+    ##  [34] "[1] \"Word: an |  Entry: an\""                                                                                                  
+    ##  [35] "[1] \"numSyl: 1 |  Stress: 1\""                                                                                                 
+    ##  [36] "[1] \"Prosodic encoding for 'an' is: 2 .  Phonetic Word= 0\""                                                                   
+    ##  [37] "[1] \"--------------------------------------------------------------------\""                                                   
+    ##  [38] "[1] \"Word: explosion |  Entry: explosion\""                                                                                    
+    ##  [39] "[1] \"numSyl: 3 |  Stress: 2\""                                                                                                 
+    ##  [40] "[1] \"Prosodic encoding for 'explosion' is: 0 1 0 .  Phonetic Word= 1\""                                                        
+    ##  [41] "[1] \"--------------------------------------------------------------------\""                                                   
+    ##  [42] "[1] \"Word: that |  Entry: that\""                                                                                              
+    ##  [43] "[1] \"numSyl: 1 |  Stress: 1\""                                                                                                 
+    ##  [44] "[1] \"Prosodic encoding for 'that' is: 3 .  Phonetic Word= 1\""                                                                 
+    ##  [45] "[1] \"--------------------------------------------------------------------\""                                                   
+    ##  [46] "[1] \"Word: injured |  Entry: injured\""                                                                                        
+    ##  [47] "[1] \"numSyl: 2 |  Stress: 1\""                                                                                                 
+    ##  [48] "[1] \"Prosodic encoding for 'injured' is: 3 0 .  Phonetic Word= 1\""                                                            
+    ##  [49] "[1] \"--------------------------------------------------------------------\""                                                   
+    ##  [50] "[1] \"Word: twenty |  Entry: twenty\""                                                                                          
+    ##  [51] "[1] \"numSyl: 2 |  Stress: 1\""                                                                                                 
+    ##  [52] "[1] \"Prosodic encoding for 'twenty' is: 3 0 .  Phonetic Word= 1\""                                                             
+    ##  [53] "[1] \"--------------------------------------------------------------------\""                                                   
+    ##  [54] "[1] \"Word: nine |  Entry: nine\""                                                                                              
+    ##  [55] "[1] \"numSyl: 1 |  Stress: 1\""                                                                                                 
+    ##  [56] "[1] \"Prosodic encoding for 'nine' is: 3 .  Phonetic Word= 1\""                                                                 
+    ##  [57] "[1] \"--------------------------------------------------------------------\""                                                   
+    ##  [58] "[1] \"Word: people |  Entry: people\""                                                                                          
+    ##  [59] "[1] \"numSyl: 2 |  Stress: 1\""                                                                                                 
+    ##  [60] "[1] \"Prosodic encoding for 'people' is: 3 0 .  Phonetic Word= 1\""                                                             
+    ##  [61] "[1] \"--------------------------------------------------------------------\""                                                   
+    ##  [62] "[1] \"Word: in |  Entry: in\""                                                                                                  
+    ##  [63] "[1] \"numSyl: 1 |  Stress: 1\""                                                                                                 
+    ##  [64] "[1] \"Prosodic encoding for 'in' is: 3 .  Phonetic Word= 1\""                                                                   
+    ##  [65] "[1] \"--------------------------------------------------------------------\""                                                   
+    ##  [66] "[1] \"Word: new |  Entry: new\""                                                                                                
+    ##  [67] "[1] \"numSyl: 1 |  Stress: 1\""                                                                                                 
+    ##  [68] "[1] \"Prosodic encoding for 'new' is: 3 .  Phonetic Word= 1\""                                                                  
+    ##  [69] "[1] \"--------------------------------------------------------------------\""                                                   
+    ##  [70] "[1] \"Word: york |  Entry: York\""                                                                                              
+    ##  [71] "[1] \"numSyl: 1 |  Stress: 1\""                                                                                                 
+    ##  [72] "[1] \"Prosodic encoding for 'york' is: 3 .  Phonetic Word= 1\""                                                                 
+    ##  [73] "[1] \"--------------------------------------------------------------------\""                                                   
+    ##  [74] "[1] \"Calling Merriam Webster dictionary because phonetic spelling was not given or  dictionary entry may have been incorrect\""
+    ##  [75] "[1] \"Entry not found in backup Webster dictionary\""                                                                           
+    ##  [76] "[1] \"Word was not found in dictionary.  Revert to original function\""                                                         
+    ##  [77] "[1] \"Word: chelsea\""                                                                                                          
+    ##  [78] "[1] \"numSyl: 2 |  Stress: 1\""                                                                                                 
+    ##  [79] "[1] \"Prosodic encoding for 'chelsea' is: 3 0 .  Phonetic Word= 1\""                                                            
+    ##  [80] "[1] \"--------------------------------------------------------------------\""                                                   
+    ##  [81] "[1] \"Word: neighborhood |  Entry: neighborhood\""                                                                              
+    ##  [82] "[1] \"numSyl: 3 |  Stress: 1\""                                                                                                 
+    ##  [83] "[1] \"Prosodic encoding for 'neighborhood' is: 3 0 0 .  Phonetic Word= 1\""                                                     
+    ##  [84] "[1] \"--------------------------------------------------------------------\""                                                   
+    ##  [85] "[1] \"Word: shortly |  Entry: shortly\""                                                                                        
+    ##  [86] "[1] \"numSyl: 2 |  Stress: 1\""                                                                                                 
+    ##  [87] "[1] \"Prosodic encoding for 'shortly' is: 3 0 .  Phonetic Word= 1\""                                                            
+    ##  [88] "[1] \"--------------------------------------------------------------------\""                                                   
+    ##  [89] "[1] \"Word: before |  Entry: before\""                                                                                          
+    ##  [90] "[1] \"numSyl: 2 |  Stress: 2\""                                                                                                 
+    ##  [91] "[1] \"Prosodic encoding for 'before' is: 2 1 .  Phonetic Word= 1\""                                                             
+    ##  [92] "[1] \"--------------------------------------------------------------------\""                                                   
+    ##  [93] "[1] \"Word: a |  Entry: a\""                                                                                                    
+    ##  [94] "[1] \"numSyl: 1 |  Stress: 1\""                                                                                                 
+    ##  [95] "[1] \"Prosodic encoding for 'a' is: 2 .  Phonetic Word= 0\""                                                                    
+    ##  [96] "[1] \"--------------------------------------------------------------------\""                                                   
+    ##  [97] "[1] \"Word: second |  Entry: second\""                                                                                          
+    ##  [98] "[1] \"numSyl: 2 |  Stress: 1\""                                                                                                 
+    ##  [99] "[1] \"Prosodic encoding for 'second' is: 1 0 .  Phonetic Word= 1\""                                                             
+    ## [100] "[1] \"--------------------------------------------------------------------\""                                                   
+    ## [101] "[1] \"Word: suspicious |  Entry: suspicious\""                                                                                  
+    ## [102] "[1] \"numSyl: 3 |  Stress: 2\""                                                                                                 
+    ## [103] "[1] \"Prosodic encoding for 'suspicious' is: 2 1 0 .  Phonetic Word= 1\""                                                       
+    ## [104] "[1] \"--------------------------------------------------------------------\""                                                   
+    ## [105] "[1] \"Word: device |  Entry: device\""                                                                                          
+    ## [106] "[1] \"numSyl: 2 |  Stress: 2\""                                                                                                 
+    ## [107] "[1] \"Prosodic encoding for 'device' is: 2 1 .  Phonetic Word= 1\""                                                             
+    ## [108] "[1] \"--------------------------------------------------------------------\""                                                   
+    ## [109] "[1] \"Word: was |  Entry: was\""                                                                                                
+    ## [110] "[1] \"numSyl: 1 |  Stress: 1\""                                                                                                 
+    ## [111] "[1] \"Prosodic encoding for 'was' is: 3 .  Phonetic Word= 1\""                                                                  
+    ## [112] "[1] \"--------------------------------------------------------------------\""                                                   
+    ## [113] "[1] \"Word: found |  Entry: found\""                                                                                            
+    ## [114] "[1] \"numSyl: 1 |  Stress: 1\""                                                                                                 
+    ## [115] "[1] \"Prosodic encoding for 'found' is: 3 .  Phonetic Word= 1\""                                                                
+    ## [116] "[1] \"--------------------------------------------------------------------\""                                                   
+    ## [117] "[1] \"Word: nearby |  Entry: nearby\""                                                                                          
+    ## [118] "[1] \"numSyl: 2 |  Stress: 2\""                                                                                                 
+    ## [119] "[1] \"Prosodic encoding for 'nearby' is: 2 1 .  Phonetic Word= 1\""                                                             
+    ## [120] "[1] \"--------------------------------------------------------------------\""                                                   
+    ## [121] "[1] \"Prosodic encoding for '.' is: 4.  Phonetic Word= 1\""                                                                     
+    ## [122] "[1] \"--------------------------------------------------------------------\""
 
 ## Full disclaimer
 

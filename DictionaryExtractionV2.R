@@ -346,38 +346,38 @@ sAsENG= function(Word, type, country = "us")
 # 	
 # }
 # 
-# extract_info <- function(data) {
-#   # Extract word (removing the part of speech if attached)
-#   word_part <- str_extract(data[1], "^\\w+")
-#   part_of_speech <- str_extract(data[1], "(verb|noun|adjective|adverb)")
-#   
-#   # Remove part of speech from the word if attached
-#   word <- str_remove(word_part, part_of_speech)
-#   
-#   # Extract country
-#   country_us <- ifelse(str_detect(data[1], "us"), "us", NA)
-#   country_uk <- ifelse(str_detect(data[6], "uk"), "uk", NA)
-#   
-#   # Extract first phonetic spelling from US and UK (handling multiple phonetics)
-#   phonetic_us <- str_extract(data[6], "/.+?/")
-#   phonetic_uk <- str_extract(data[11], "/.+?/")
-#   
-#   # Split the phonetic spelling if it has a comma and extract only the first one
-#   phonetic_us <- str_split(phonetic_us, ",")[[1]][1] %>% str_trim()
-#   phonetic_uk <- str_split(phonetic_uk, ",")[[1]][1] %>% str_trim()
-#   
-#   # Create a result list
-#   result <- c(
-#     word = word,
-#     part_of_speech = part_of_speech,
-#     country_us = country_us,
-#     phonetic_us = phonetic_us,
-#     country_uk = country_uk,
-#     phonetic_uk = phonetic_uk
-#   )
-#   
-#   return(result)
-# }
+extract_info <- function(data) {
+  # Extract word (removing the part of speech if attached)
+  word_part <- str_extract(data[1], "^\\w+")
+  part_of_speech <- str_extract(data[1], "(verb|noun|adjective|adverb)")
+
+  # Remove part of speech from the word if attached
+  word <- str_remove(word_part, part_of_speech)
+
+  # Extract country
+  country_us <- ifelse(str_detect(data[1], "us"), "us", NA)
+  country_uk <- ifelse(str_detect(data[6], "uk"), "uk", NA)
+
+  # Extract first phonetic spelling from US and UK (handling multiple phonetics)
+  phonetic_us <- str_extract(data[6], "/.+?/")
+  phonetic_uk <- str_extract(data[11], "/.+?/")
+
+  # Split the phonetic spelling if it has a comma and extract only the first one
+  phonetic_us <- str_split(phonetic_us, ",")[[1]][1] %>% str_trim()
+  phonetic_uk <- str_split(phonetic_uk, ",")[[1]][1] %>% str_trim()
+
+  # Create a result list
+  result <- c(
+    word = word,
+    part_of_speech = part_of_speech,
+    country_us = country_us,
+    phonetic_us = phonetic_us,
+    country_uk = country_uk,
+    phonetic_uk = phonetic_uk
+  )
+
+  return(result)
+}
 
 
 cleanBrit= function(Array, Word){
