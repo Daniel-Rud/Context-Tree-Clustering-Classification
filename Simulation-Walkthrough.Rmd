@@ -12,7 +12,11 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Introduction 
 
-In this document, we provide code for the simulations described in the manuscript *Context Tree Clustering and Classification*. We first introduce the context tree structural dissimilarity measures.  
+In this document, we provide code for the simulations described in the manuscript *Context Tree Clustering and Classification*. We will first run through an walk-through version of a single simulation scenario.  At the end of the manuscript, we provide the code used to run all simulation scenarios and the results of the classification and clustering for each simulation scenario.  
+
+## Simulation Walkthrough
+
+We first introduce the context tree structural dissimilarity measures.  
 
 If you would like to run the results chunk by chunk, please refer to the *Simulation-Walkthrough.Rmd* file.  
 
@@ -28,6 +32,8 @@ if (!require("factoextra")) install.packages("factoextra", dependencies = TRUE);
 if (!require("mclust")) install.packages("mclust", dependencies = TRUE); library("mclust")
 if (!require("infotheo")) install.packages("infotheo", dependencies = TRUE); library("infotheo")
 if (!require("fossil")) install.packages("fossil", dependencies = TRUE); library("fossil")
+if (!require("future")) install.packages("future", dependencies = TRUE); library("future")
+if (!require("future.apply")) install.packages("future.apply", dependencies = TRUE); library("future.apply")
 ```
 
 # Loading Neccessary Functions 
@@ -44,21 +50,25 @@ strReverse <- function(x)
 # generate all state space paths from a VLMC tree object 
 vlmcTreePaths= function(vlmcObj)
 {
-  dendrogram= as.dendrogram(vlmcObj)
-  #plot(dendrogram)
   allPaths=vector(mode="character")
-  for(i in 1:length(names(dendrogram)))
+  if(vlmcObj$size["ord.MC"] != 0)
   {
-    string= capture.output(dendrogram[i])
-    entries= which(grepl("$", string, fixed=TRUE))
-    paths= string[entries]
-    for( j in 1: length(paths))
+    # if the VLMC is NOT order 0
+    dendrogram= as.dendrogram(vlmcObj)
+    #plot(dendrogram)
+    for(i in 1:length(names(dendrogram)))
     {
-      paths[j]= gsub("$", "", paths[j], fixed=TRUE)
-      paths[j]= gsub("`", "", paths[j], fixed=TRUE)
-      paths[j]= gsub("NA", "", paths[j], fixed=TRUE)
+      string= capture.output(dendrogram[i])
+      entries= which(grepl("$", string, fixed=TRUE))
+      paths= string[entries]
+      for( j in 1: length(paths))
+      {
+        paths[j]= gsub("$", "", paths[j], fixed=TRUE)
+        paths[j]= gsub("`", "", paths[j], fixed=TRUE)
+        paths[j]= gsub("NA", "", paths[j], fixed=TRUE)
+      }
+      allPaths=append(allPaths, paths)
     }
-    allPaths=append(allPaths, paths)
   }
   return(allPaths)	
 }
@@ -152,7 +162,7 @@ pDistance <- function(VLMC1, VLMC2, textOutput1, textOutput2)
 
 ```
 
-Functions for KNN 
+Some functions for K nearest neighbors (KNN). 
 
 ```{r}
 
@@ -198,7 +208,7 @@ KNN_dist_matrix <- function(fulldistanceMatrix, train_sample_index, test_sample_
 }
 ```
 
-We now define a function to measure cluster accuracy 
+We now define a function to measure cluster accuracy.
 
 ```{r}
 Mismatch <- function(mm, true_clusters, K)
@@ -218,13 +228,14 @@ Mismatch <- function(mm, true_clusters, K)
     
   }
   
-  
   return(min(Miss))
 }
 
 ```
 
-# Simulation Study:
+
+
+## Simulation Study -- Scenario 1
 
 First, we define two generating VLMCs from two seperate state sequences. vlmcA and vlmcB serve as the two *population* context trees from which we will simulate state sequences from.  
 ```{r}
@@ -240,7 +251,7 @@ vlmcB = vlmc(dataB)
 
 ```
 
-The simulations in Table 1. iterate over the length of the state sequence sampled from each of the 40 vlmcA and 40 vlmcB context trees.
+The simulations in Table 1 iterate over the length of the state sequence sampled from each of the 40 vlmcA and 40 vlmcB context trees.
 We showcase a single iteration, where the length of the state sequence is 500.  
 
 ```{r}
@@ -253,7 +264,7 @@ n.neighbors = 7 # number of neighbors for classification
 vlmcs = list()
 
 # for reproducability
-set.seed(1)
+set.seed(2024)
 
 # number of unique classes K
 K = 2	
@@ -322,22 +333,6 @@ Here, we compute the distance $D_{\alpha_{|\chi|}}^*$.  Note that the for loop o
 ##############################################################################################
 ##############################################################################################
 alpha_divisor = length(unique(dataA))^2/4 
-homogeneity = 0
-
-# loop is provided in case one would like to test a sequence of alpha_divisor values 
-for (ind.alpha_divisor in 1:length(alpha_divisor)) 
-{
-  alpha = pmin(tfulldistanceMatrix/alpha_divisor[ind.alpha_divisor],1)
-  fulldistanceMatrix = alpha*tfulldistanceMatrix + (1-alpha)*pfulldistanceMatrix
-  distanceMatrix = alpha*tdistanceMatrix + (1-alpha)*pdistanceMatrix
-  k_medoids = pam(as.dist(distanceMatrix),k = K, medoids = sample(1:n,K))
-  #### compute homogeneity of clusters
-  homogeneity[ind.alpha_divisor] = 0
-  for (ind.k in 1:K)
-    homogeneity[ind.alpha_divisor] = homogeneity[ind.alpha_divisor] + sum(fulldistanceMatrix[k_medoids$medoids[ind.k],which(k_medoids$clustering == ind.k)])
-}
-
-alpha_divisor = alpha_divisor[which.min(homogeneity)]
 
 alpha = pmin(tfulldistanceMatrix/alpha_divisor,1)
 
@@ -374,24 +369,6 @@ distanceMatrix_alpha_fixed = alpha*tdistanceMatrix + (1-alpha)*pdistanceMatrix
 Computation of $D_{\alpha_{|\chi|}}^*$ for classification.  Note that one could pre-specify a sequence of alpha divisor values, where the alpha divisor that minimizes the sum of the distances to the medoids would be selected.   However, only the alpha divisor $|\chi|^2/4$ is used.  
 ```{r}
 alpha_divisor = length(unique(dataA))^2/4 
-homogeneity = 0
-for (ind.alpha_divisor in 1:length(alpha_divisor))
-{
-  alpha = pmin(tfulldistanceMatrix/alpha_divisor[ind.alpha_divisor],1)
-  fulldistanceMatrix = alpha*tfulldistanceMatrix + (1-alpha)*pfulldistanceMatrix
-  distanceMatrix = alpha*tdistanceMatrix + (1-alpha)*pdistanceMatrix
-  #### compute homogeneity of clusters
-  homogeneity[ind.alpha_divisor] = 0
-  for (ind.k in 1:K)
-  {
-    ## find the medoids of the groups from the classification labels
-    med = pam(as.dist(distanceMatrix[which(all_labels == (ind.k-1)),which(all_labels == (ind.k-1))]),k = 1)
-    homogeneity[ind.alpha_divisor] = homogeneity[ind.alpha_divisor] + sum(fulldistanceMatrix[med$medoids,which(all_labels == (ind.k-1))])
-  }
-}
-
-alpha_divisor = alpha_divisor[which.min(homogeneity)]
-
 alpha = pmin(tfulldistanceMatrix/alpha_divisor,1)
 
 fulldistanceMatrix_indv_alpha_classif = alpha*tfulldistanceMatrix + (1-alpha)*pfulldistanceMatrix
@@ -402,16 +379,24 @@ Computation of $D_{\alpha_{med}}^*$.  Note that we will make this a function, si
 
 ```{r}
 
-
-generate_D_alpha_med = function(tfulldistanceMatrix, pfulldistanceMatrix, all_labels)
+generate_D_alpha_med = function(tfulldistanceMatrix, pfulldistanceMatrix, all_labels, K)
 {
   alphas = seq(0.01, 0.99, length = 20)
   homogeneity = 0
+  
+  
+  # get lower tri distance matricies 
+  tdistanceMatrix = tfulldistanceMatrix
+  tdistanceMatrix[upper.tri(tdistanceMatrix)] = 0
+  
+  pdistanceMatrix = pfulldistanceMatrix
+  pdistanceMatrix[upper.tri(pdistanceMatrix)] = 0
+  
   for (ind.alphas in 1:length(alphas))
   {
     alpha = alphas[ind.alphas]
     fulldistanceMatrix = alpha*tfulldistanceMatrix + (1-alpha)*pfulldistanceMatrix
-    distanceMatrix = alpha*tdistanceMatrix + (1-alpha)*pdistanceMatrix
+    distanceMatrix = alpha* tdistanceMatrix + (1-alpha)*pdistanceMatrix
     #### compute homogeneity of groups of classified objects
     homogeneity[ind.alphas] = 0
     for (ind.k in 1:K)
@@ -426,7 +411,7 @@ generate_D_alpha_med = function(tfulldistanceMatrix, pfulldistanceMatrix, all_la
   return(alpha)
 }
 
-alpha = generate_D_alpha_med(tfulldistanceMatrix, pfulldistanceMatrix, all_labels)
+alpha = generate_D_alpha_med(tfulldistanceMatrix, pfulldistanceMatrix, all_labels, K = K)
 
 fulldistanceMatrix_alpha_fixed_classif = alpha*tfulldistanceMatrix + (1-alpha)*pfulldistanceMatrix
 distanceMatrix_alpha_fixed_classif = alpha*tdistanceMatrix + (1-alpha)*pdistanceMatrix
@@ -462,7 +447,7 @@ classif_results[3,1] = sum(classify == all_labels)/n
 
 D_alpha_med_alphas = sapply(1:n, FUN = function(test_ind)
 {
-  alpha = generate_D_alpha_med(tfulldistanceMatrix[-test_ind, -test_ind],pfulldistanceMatrix[-test_ind, -test_ind], all_labels[-test_ind])
+  alpha = generate_D_alpha_med(tfulldistanceMatrix[-test_ind, -test_ind],pfulldistanceMatrix[-test_ind, -test_ind], all_labels[-test_ind], K = K)
 })
 
 classify = numeric(n)
@@ -471,6 +456,7 @@ classify = numeric(n)
 for(i in 1:n)
 {
   fulldistanceMatrix_alpha_fixed_classif_curr = D_alpha_med_alphas[i]*tfulldistanceMatrix + (1-D_alpha_med_alphas[i])*pfulldistanceMatrix
+  
   classify[i] = KNN_dist_matrix(fulldistanceMatrix_alpha_fixed_classif_curr,
                                 train_sample_index = (1:n)[-i], 
                                 test_sample_index = i,  
@@ -520,7 +506,7 @@ for (index.split in 1:n.random_splits)
   # need to compute alpha with respect to ONLY training data
   curr_alpha = generate_D_alpha_med(tfulldistanceMatrix[-test_sample_index, -test_sample_index], 
                                     pfulldistanceMatrix[-test_sample_index, -test_sample_index], 
-                                    all_labels = all_labels[-test_sample_index])
+                                    all_labels = all_labels[-test_sample_index], K = K)
   
   fulldistanceMatrix_alpha_fixed_classif_curr = curr_alpha*tfulldistanceMatrix + (1-curr_alpha)*pfulldistanceMatrix
   
@@ -572,9 +558,6 @@ rownames(clustering_results) = c("K-Medoids - tDistance",
 # They will be treated as points with n.time_series dimensions in KNN. 
 state_sequences = t(sapply(vlmcs, "[[", 3))
 
-# set seed for reproducibility 
-set.seed(2024)
-
 
 # Iterate over n.iter iterations -- accounting for randomness in initial centroid selection 
 for (iter in 1:n.iter) 
@@ -616,6 +599,604 @@ clustering_results = clustering_results / n.iter
 
 cat(paste0("Clustering Results for n.time_series = ", n.time_series, ", n = ",n, ":\n"))
 clustering_results 
+
+```
+
+
+
+# Generation of all Tables and scenarios
+
+We will now perform all the simulations for Scenarios 1, 2, and 3 in the main manuscript.  First, we define some general functions for the clustering and classification simulations.  
+```{r}
+
+run_VLMC_simulation = function(vlmcA, vlmcB,
+                               vlmcC = NULL,
+                               n.time_series = 100, n.neighbors = 7, 
+                               K = 2, n = 80, 
+                               n.random_splits = 100, 
+                               n.iter = 100)
+{
+  # n.random_splits -- number of train test splits to assess 
+  # n.iter -- number of times to repeat K medoid clustering
+  ##############################################################################################
+  # generate VLMCs 
+  ##############################################################################################
+  
+  vlmcs = vector(mode = "list", length = n)
+  
+  # if only two generating VLMCs -- Scenario 1 and 2 
+  if(is.null(vlmcC))
+  {
+    
+    for (index in 1:(n/2))
+    {
+      simulated_data = simulate(vlmcA, n.time_series)
+      vlmcs[[index]] = list(0,vlmc(simulated_data, threshold.gen=10, alpha=0.05), as.numeric(simulated_data))
+    }
+    for (index in (n/2+1):n)
+    {
+      simulated_data = simulate(vlmcB, n.time_series)
+      vlmcs[[index]] = list(1,vlmc(simulated_data, threshold.gen=10, alpha=0.05), as.numeric(simulated_data))
+    }	
+  }else # if three generating VLMCs -- Scenario 3
+  {
+     for (index in 1:(n/3))
+    {
+      simulated_data = simulate(vlmcA, n.time_series)
+      vlmcs[[index]] = list(0,vlmc(simulated_data, threshold.gen=10, alpha=0.05), as.numeric(simulated_data))
+    }
+    for (index in (n/3+1):(2*n/3))
+    {
+      simulated_data = simulate(vlmcB, n.time_series)
+      vlmcs[[index]] = list(1,vlmc(simulated_data, threshold.gen=10, alpha=0.05), as.numeric(simulated_data))
+    }	
+      for (index in (2*n/3 + 1):n)
+    {
+      simulated_data = simulate(vlmcC, n.time_series)
+      vlmcs[[index]] = list(2,vlmc(simulated_data, threshold.gen=10, alpha=0.05), as.numeric(simulated_data))
+    }	
+    
+  }
+  
+  # shuffle the observations 
+  vlmcs = vlmcs[sample(n)]
+  
+  # true labels of shuffled VLMCs
+  all_labels = do.call("rbind", lapply(vlmcs, "[[", 1))
+  
+  ##############################################################################################
+  # compute distances
+  ##############################################################################################
+  ## tDistance is the distance based on the contexts only
+  tdistanceMatrix = matrix(0, n, n)
+  for(index in 2:n) #first entry a_11 = 0
+  {
+    for(j in 1:index)
+      tdistanceMatrix[index,j]= tDistance(vlmcs[[index]][[2]], vlmcs[[j]][[2]])
+  }
+  tfulldistanceMatrix = tdistanceMatrix + t(tdistanceMatrix)
+  
+  ##############################################################################################
+  # pDistance is the distance based on the probabilities of the reduced subgraph
+  pdistanceMatrix = matrix(0, n, n)
+  for(index in 2:n) #first entry a_11 = 0
+  {
+    for(j in 1:index)
+      pdistanceMatrix[index,j]= pDistance(vlmcs[[index]][[2]], vlmcs[[j]][[2]], vlmcs[[index]][[3]], vlmcs[[j]][[3]])
+    
+  }
+  pdistanceMatrix[is.na(pdistanceMatrix)] = 0
+  pfulldistanceMatrix = pdistanceMatrix + t(pdistanceMatrix)
+  
+  ##############################################################################################
+  # generate D_alpha_|chi|* -- Classification
+  alpha_divisor = length(c(0,1,2,3,4))^2/4 
+  alpha = pmin(tfulldistanceMatrix/alpha_divisor,1)
+  
+  fulldistanceMatrix_indv_alpha_classif = alpha*tfulldistanceMatrix + (1-alpha)*pfulldistanceMatrix
+  distanceMatrix_indv_alpha_classif = alpha*tdistanceMatrix + (1-alpha)*pdistanceMatrix
+  
+  ##############################################################################################
+  # D_alpha_med* -- generated on training loop since hyperparameter is tuned  -- Classification
+  ##############################################################################################
+  # Clustering D_alpha_|chi|* -- Clustering
+  alpha_divisor = length(c(0,1,2,3,4))^2/4 
+  
+  alpha = pmin(tfulldistanceMatrix/alpha_divisor,1)
+  
+  fulldistanceMatrix_indv_alpha = alpha*tfulldistanceMatrix + (1-alpha)*pfulldistanceMatrix
+  distanceMatrix_indv_alpha = alpha*tdistanceMatrix + (1-alpha)*pdistanceMatrix
+  ##############################################################################################
+  # D_alpha_WCSS -- Clustering 
+  alphas = seq(0.01, 0.99, length = 20)
+  homogeneity = 0
+  for (ind.alphas in 1:length(alphas))
+  {
+    alpha = alphas[ind.alphas]
+    fulldistanceMatrix = alpha*tfulldistanceMatrix + (1-alpha)*pfulldistanceMatrix
+    distanceMatrix = alpha*tdistanceMatrix + (1-alpha)*pdistanceMatrix
+    k_medoids = pam(as.dist(distanceMatrix),k = K, medoids = sample(1:n,K))
+    #### compute homogeneity of clusters
+    homogeneity[ind.alphas] = 0
+    for (ind.k in 1:K)
+      homogeneity[ind.alphas] = homogeneity[ind.alphas] + sum(fulldistanceMatrix[k_medoids$medoids[ind.k],which(k_medoids$clustering == ind.k)])
+  }
+  
+  alpha = alphas[which.min(homogeneity)]
+  
+  fulldistanceMatrix_alpha_fixed = alpha*tfulldistanceMatrix + (1-alpha)*pfulldistanceMatrix
+  distanceMatrix_alpha_fixed = alpha*tdistanceMatrix + (1-alpha)*pdistanceMatrix
+  
+  ##############################################################################################
+  ##############################################################################################
+  # CLASSIFICATION
+  ##############################################################################################
+  ##############################################################################################
+  
+  ##############################################################################################
+  # LOOCV
+  ##############################################################################################
+  classif_results = matrix(data = 0, nrow = 5, ncol = 2)
+  colnames(classif_results) = c("LOOCV", "70-30 train test")
+  rownames(classif_results) = c("KNN - tDistance",
+                                "KNN - pDistance",
+                                "KNN - D_alpha_|chi|*",
+                                "KNN - D_alpha_med*",
+                                "KNN - Classic"
+  )
+  
+  # tDistance 
+  classify = KNN_dist_matrix(tfulldistanceMatrix, 1:n, 1:n, all_labels = all_labels, n.neighbors)
+  classif_results[1,1] = sum(classify == all_labels)/n
+  
+  # pDistance
+  classify = KNN_dist_matrix(pfulldistanceMatrix, 1:n, 1:n, all_labels = all_labels, n.neighbors)
+  classif_results[2,1] = sum(classify == all_labels)/n
+  
+  
+  # D_alpha_|chi|*
+  classify = KNN_dist_matrix(fulldistanceMatrix_indv_alpha_classif, 1:n, 1:n, all_labels = all_labels, n.neighbors)
+  classif_results[3,1] = sum(classify == all_labels)/n
+  
+  # D_alpha_med*
+  # need to compute alpha with respect to ONLY training data
+  D_alpha_med_alphas = sapply(1:n, FUN = function(test_ind)
+  {
+    alpha = generate_D_alpha_med(tfulldistanceMatrix[-test_ind, -test_ind],pfulldistanceMatrix[-test_ind, -test_ind], all_labels[-test_ind], K = K)
+  })
+  
+  classify = numeric(n)
+  
+  # get LOOCV classification results, with each alpha for D_alpha_med computed on current training data
+  for(i in 1:n)
+  {
+    fulldistanceMatrix_alpha_fixed_classif_curr = D_alpha_med_alphas[i]*tfulldistanceMatrix + (1-D_alpha_med_alphas[i])*pfulldistanceMatrix
+    
+    classify[i] = KNN_dist_matrix(fulldistanceMatrix_alpha_fixed_classif_curr,
+                                  train_sample_index = (1:n)[-i], 
+                                  test_sample_index = i,  
+                                  all_labels = all_labels, 
+                                  n.neighbors = n.neighbors)
+  }
+  
+  classif_results[4,1] = sum(classify == all_labels)/n
+  
+  # Classic KNN 
+  
+  data_set_all = t(sapply(vlmcs, "[[", 3))
+  classify = knn(data_set_all, data_set_all, all_labels, n.neighbors)
+  classif_results[5,1] = sum(classify == all_labels)/n
+  
+  ##############################################################################################
+  # Train/Test Splits
+  ##############################################################################################
+  
+  for (index.split in 1:n.random_splits)
+  {	
+    train_sample_index = sample(1:n,n*0.70)
+    test_sample_index = (1:n)[-train_sample_index]
+    
+    train_vlmcs = vlmcs[train_sample_index]
+    test_vlmcs = vlmcs[test_sample_index]
+    true_labels_train = do.call("rbind", lapply(train_vlmcs, "[[", 1))
+    true_labels_test = do.call("rbind", lapply(test_vlmcs, "[[", 1))
+    
+    # tDistance 
+    classify = KNN_dist_matrix(tfulldistanceMatrix, train_sample_index, test_sample_index, all_labels = all_labels, n.neighbors)
+    classif_results[1,2] = classif_results[1,2] + sum(classify == true_labels_test)/length(test_sample_index)
+    
+    # pDistance
+    classify = KNN_dist_matrix(pfulldistanceMatrix, train_sample_index, test_sample_index, all_labels = all_labels, n.neighbors)
+    classif_results[2,2] = classif_results[2,2] + sum(classify == true_labels_test)/length(test_sample_index)
+    
+    # D_alpha_|chi|*
+    classify = KNN_dist_matrix(fulldistanceMatrix_indv_alpha_classif, train_sample_index, test_sample_index, all_labels = all_labels, n.neighbors)
+    classif_results[3,2] = classif_results[3,2] + sum(classify == true_labels_test)/length(test_sample_index)
+    
+    # D_alpha_med*
+    # need to compute alpha with respect to ONLY training data
+    curr_alpha = generate_D_alpha_med(tfulldistanceMatrix[-test_sample_index, -test_sample_index], 
+                                      pfulldistanceMatrix[-test_sample_index, -test_sample_index], 
+                                      all_labels = all_labels[-test_sample_index], K = K)
+    
+    fulldistanceMatrix_alpha_fixed_classif_curr = curr_alpha*tfulldistanceMatrix + (1-curr_alpha)*pfulldistanceMatrix
+    
+    classify = KNN_dist_matrix(fulldistanceMatrix_alpha_fixed_classif_curr, train_sample_index, test_sample_index, all_labels = all_labels, n.neighbors)
+    classif_results[4,2] = classif_results[4,2] + sum(classify == true_labels_test)/length(test_sample_index)
+    
+    # Classic KNN 
+    
+    # get training state sequences 
+    
+    data_set_train = t(sapply(train_vlmcs, "[[", 3))
+    data_set_test = t(sapply(test_vlmcs, "[[", 3))
+    
+    classify = knn(data_set_train, data_set_test, true_labels_train, n.neighbors)
+    classif_results[5,2] = classif_results[5,2] + sum(classify == true_labels_test)/length(test_sample_index)
+  }
+  
+  
+  # divide by simulation replicates for 100 70-30 train test splits 
+  classif_results[,2] = classif_results[,2] / n.random_splits
+  
+  # reshape -- add names
+  classif_results = c(classif_results[,1], classif_results[,2])
+  names(classif_results)[1:5] = paste0("LOOCV- ", names(classif_results)[1:5])
+  names(classif_results)[6:10] = paste0("Train/Test- ", names(classif_results)[1:5])
+  
+  
+  ##############################################################################################
+  ##############################################################################################
+  # CLUSTERING
+  ##############################################################################################
+  ##############################################################################################
+  
+  # the following are initialized for storing results
+  clustering_results = matrix(0, nrow = 5, ncol = 3)
+  colnames(clustering_results) = c("rate", "rand.index_rate","mutual_info rate")
+  rownames(clustering_results) = c("K-Medoids - tDistance", 
+                                   "K-Medoids - pDistance",
+                                   "K-Medoids - D_{alpha_{|chi|}}*", 
+                                   "K-Medoids - D_{alpha_{WCSS}}*", 
+                                   "Classical KNN")
+  
+  
+  
+  # to compare with K means clustering, we need to extract the state sequences.  
+  # They will be treated as points with n.time_series dimensions in KNN. 
+  state_sequences = t(sapply(vlmcs, "[[", 3))
+  
+  # Iterate over n.iter iterations -- accounting for randomness in initial centroid selection 
+  for (iter in 1:n.iter) 
+  {
+    # K medoids using tDistance
+    k_medoids = pam(x = as.dist(tdistanceMatrix),k = K, medoids = sample(1:n,K))
+    clustering_results[1,1] = clustering_results[1,1] + (n - Mismatch(k_medoids$clustering, (as.numeric(all_labels)+1), K = K))/n
+    clustering_results[1,2] = clustering_results[1,2] + rand.index(k_medoids$clustering, (as.numeric(all_labels)+1))
+    clustering_results[1,3] = clustering_results[1,3] + mutinformation(k_medoids$clustering, (as.numeric(all_labels)+1))
+    
+    # K medioids using pDistance 
+    k_medoids = pam(x = as.dist(pdistanceMatrix),k = K, medoids = sample(1:n,K))
+    clustering_results[2,1] = clustering_results[2,1] + (n - Mismatch(k_medoids$clustering, (as.numeric(all_labels)+1), K = K))/n
+    clustering_results[2,2] = clustering_results[2,2] + rand.index(k_medoids$clustering, (as.numeric(all_labels)+1))
+    clustering_results[2,3] = clustering_results[2,3] + mutinformation(k_medoids$clustering, (as.numeric(all_labels)+1))
+    
+    # K medoids using D_{\alpha_{|\chi|}}^*
+    k_medoids = pam(as.dist(distanceMatrix_indv_alpha),k = K, medoids = sample(1:n,K))
+    clustering_results[3,1] = clustering_results[3,1] + (n - Mismatch(k_medoids$clustering, (as.numeric(all_labels)+1), K = K))/n
+    clustering_results[3,2] = clustering_results[3,2] + rand.index(k_medoids$clustering, (as.numeric(all_labels)+1))
+    clustering_results[3,3] = clustering_results[3,3] + mutinformation(k_medoids$clustering, (as.numeric(all_labels)+1))
+    
+    # K medoids using D_{\alpha_{WCSS}}^*
+    k_medoids = pam(as.dist(distanceMatrix_alpha_fixed),k = K, medoids = sample(1:n,K))
+    clustering_results[4,1] = clustering_results[4,1] + (n - Mismatch(k_medoids$clustering, (as.numeric(all_labels)+1), K = K))/n
+    clustering_results[4,2] = clustering_results[4,2] + rand.index(k_medoids$clustering, (as.numeric(all_labels)+1))
+    clustering_results[4,3] = clustering_results[4,3] + mutinformation(k_medoids$clustering, (as.numeric(all_labels)+1))
+    
+    # Classical K means 
+    
+    classic_kmeans = kmeans(state_sequences, centers = K)
+    clustering_results[5,1] = clustering_results[5,1] + (n - Mismatch(classic_kmeans$cluster, (as.numeric(all_labels)+1), K = K))/n
+    clustering_results[5,2] = clustering_results[5,2] + rand.index(classic_kmeans$cluster, (as.numeric(all_labels)+1))
+    clustering_results[5,3] = clustering_results[5,3] + mutinformation(classic_kmeans$cluster, (as.numeric(all_labels)+1))
+  }
+  
+  # divide by simulation replicates 
+  clustering_results = clustering_results / n.iter
+  
+  return_list = list(classif_results = classif_results, 
+                     clustering_results = clustering_results[,1])
+  
+  return(return_list)
+}
+```
+
+
+## Scenario 1 
+
+```{r, eval = F}
+dataA = c(1, 3, 3, 3, 0, 0, 2, 1, 3, 3, 3, 2, 1, 0, 0, 3, 0, 4, 3, 2, 1, 2, 1, 0, 0, 4, 2, 1, 0, 3, 3, 0, 3, 3, 3, 3, 0, 0, 2, 1, 3, 0, 0, 3, 3, 3, 2, 1, 0, 0, 3, 0, 3, 3, 0, 3, 0, 3, 3, 0, 3, 0, 3, 0, 3, 4, 3, 2, 1, 0, 0, 3, 2, 1, 2, 1, 0, 3, 3, 3, 3, 2, 1, 3, 3, 0, 2, 1, 4, 3, 0, 3, 3, 3, 3, 4, 3, 0, 3, 3)
+
+dataB = c(3, 1, 3, 1, 3, 3, 3, 0, 2, 1, 2, 1, 3, 3, 3, 3, 3, 4, 3, 0, 3, 3, 0, 3, 3, 3, 0, 0, 3, 0, 3, 0, 3, 2, 1, 0, 0, 3, 3, 3, 0, 2, 0, 1, 0, 2, 1, 0, 0, 3, 2, 0, 1, 2, 0, 1, 0, 4, 3, 0, 3, 0, 2, 1, 4, 3, 1, 1, 0, 3, 3, 3, 3, 2, 1, 3, 3, 3, 3, 3, 0, 3, 3, 2, 1, 3, 2, 1, 3, 0, 3, 0, 0, 3, 4, 3, 2, 1, 4, 3, 0, 3, 3, 0, 4, 3, 0, 0, 3, 0, 3, 3, 2, 1, 0, 3, 2, 1, 3, 3, 3, 2, 1, 0, 3, 3, 4, 2, 1, 3, 4, 3, 2, 1, 3, 2, 0, 1, 3, 2)
+
+# Create pop VLMCs
+vlmcA = vlmc(dataA)
+vlmcB = vlmc(dataB)
+
+draw(vlmcA)
+draw(vlmcB)
+
+n.time_series = c(50, 100,500,1000, 2000) ## how many observations of the chain we are generating
+scenario_1_classif_results = matrix(data = 0, nrow = length(n.time_series), 
+                                    ncol = 10)
+scenario_1_clustering_results = matrix(data = 0, nrow = length(n.time_series), 
+                                    ncol = 5)
+
+rownames(scenario_1_classif_results) = paste0("T = ", n.time_series)
+rownames(scenario_1_clustering_results) = paste0("T = ", n.time_series)
+
+
+n.simulations = 500
+n = 80
+n.neighbors = 7
+K = 2
+
+future_seeds = c(8432, 4901,  219, 6553,  138)
+
+
+for(i in 1:length(n.time_series))
+{
+  
+  plan(multisession)
+  current_sim_res = future_lapply(1:n.simulations, FUN = function(x)
+  {
+    return(run_VLMC_simulation(vlmcA = vlmcA, 
+                               vlmcB = vlmcB, 
+                               n.time_series = n.time_series[i], 
+                               n.neighbors = n.neighbors, 
+                               K = K,
+                               n = n,
+                               n.random_splits = 100, 
+                               n.iter = 100))
+  },future.seed = future_seeds[i])
+  plan(sequential)
+  
+  scenario_1_classif_results[i, ] = rowMeans(sapply(current_sim_res, "[[", 1))
+  scenario_1_clustering_results[i, ] = rowMeans(sapply(current_sim_res, "[[", 2))
+  
+  if(i == 1)
+  {
+    colnames(scenario_1_classif_results) = names(rowMeans(sapply(current_sim_res, "[[", 1)))
+    colnames(scenario_1_clustering_results) = names(rowMeans(sapply(current_sim_res, "[[", 2)))
+  }
+  
+  cat(paste("Finished sim", i))
+  
+}
+
+scenario_1_classif_results[,1:5]
+scenario_1_classif_results[,6:10]
+
+scenario_1_clustering_results
+
+
+# SAVE Results 
+Scenario_1_tables = list(scenario_1_classif_results = scenario_1_classif_results, 
+                         scenario_1_clustering_results = scenario_1_clustering_results)
+
+saveRDS(Scenario_1_tables, "Scenario_1_tables.RDS")
+
+```
+
+
+# Scenario 2
+```{r, eval = F}
+read_time_series = function(file)
+{
+  suppressWarnings(data <- readLines(file))
+  data = paste(data, collapse = "")
+  data = unlist(strsplit(data, split = ","))
+  data = as.numeric(data)
+  return(data)
+}
+
+dataA = read_time_series("Scenario2_dataA.txt")
+dataB = read_time_series("Scenario2_dataB.txt")
+
+
+# Create pop VLMCs
+vlmcA = vlmc(dataA)
+vlmcB = vlmc(dataB)
+
+draw(vlmcA)
+draw(vlmcB)
+
+n.time_series = c(50, 100,500,1000, 2000) ## how many observations of the chain we are generating
+scenario_2_classif_results = matrix(data = 0, nrow = length(n.time_series), 
+                                    ncol = 10)
+scenario_2_clustering_results = matrix(data = 0, nrow = length(n.time_series), 
+                                    ncol = 5)
+                                    
+rownames(scenario_2_classif_results) = paste0("T = ", n.time_series)
+rownames(scenario_2_clustering_results) = paste0("T = ", n.time_series)
+
+n.simulations = 500
+n = 80
+n.neighbors = 7
+K = 2
+
+future_seeds = c(8432, 4901,  219, 6553,  138)
+
+
+for(i in 1:length(n.time_series))
+{
+  
+  plan(multisession)
+  current_sim_res = future_lapply(1:n.simulations, FUN = function(x)
+  {
+    return(run_VLMC_simulation(vlmcA = vlmcA, 
+                               vlmcB = vlmcB, 
+                               n.time_series = n.time_series[i], 
+                               n.neighbors = n.neighbors, 
+                               K = K,
+                               n = n,
+                               n.random_splits = 100, 
+                               n.iter = 100))
+  },future.seed = future_seeds[i])
+  plan(sequential)
+  
+  scenario_2_classif_results[i, ] = rowMeans(sapply(current_sim_res, "[[", 1))
+  scenario_2_clustering_results[i, ] = rowMeans(sapply(current_sim_res, "[[", 2))
+  
+  if(i == 1)
+  {
+    colnames(scenario_2_classif_results) = names(rowMeans(sapply(current_sim_res, "[[", 1)))
+    colnames(scenario_2_clustering_results) = names(rowMeans(sapply(current_sim_res, "[[", 2)))
+  }
+  
+  cat(paste("Finished sim", i))
+  
+}
+
+scenario_2_classif_results[,1:5]
+scenario_2_classif_results[,6:10]
+
+scenario_2_clustering_results
+
+# SAVE Results 
+Scenario_2_tables = list(scenario_2_classif_results = scenario_2_classif_results, 
+                         scenario_2_clustering_results = scenario_2_clustering_results)
+
+saveRDS(Scenario_2_tables, "Scenario_2_tables.RDS")
+
+```
+
+# Scenario 3
+
+```{r, eval = F}
+
+dataA = read_time_series("Scenario3_dataA.txt")
+dataB = read_time_series("Scenario3_dataB.txt")
+dataC = read_time_series("Scenario3_dataC.txt")
+
+
+# Create pop VLMCs
+vlmcA = vlmc(dataA)
+vlmcB = vlmc(dataB)
+# changed threshold gen solely to influence construction of population vlmc 
+vlmcC = vlmc(dataC, threshold.gen = 100)
+
+draw(vlmcA)
+draw(vlmcB)
+draw(vlmcC)
+
+
+n.time_series = c(50, 100,500,1000, 2000) ## how many observations of the chain we are generating
+scenario_3_classif_results = matrix(data = 0, nrow = length(n.time_series), 
+                                    ncol = 10)
+scenario_3_clustering_results = matrix(data = 0, nrow = length(n.time_series), 
+                                    ncol = 5)
+rownames(scenario_3_classif_results) = paste0("T = ", n.time_series)
+rownames(scenario_3_clustering_results) = paste0("T = ", n.time_series)
+n.simulations = 500
+n = 120
+n.neighbors = 7
+K = 3
+future_seeds = c(8432, 4901,  219, 6553,  138)
+
+
+for(i in 1:length(n.time_series))
+{
+  
+  plan(multisession)
+  current_sim_res = future_lapply(1:n.simulations, FUN = function(x)
+  {
+    return(run_VLMC_simulation(vlmcA = vlmcA, 
+                               vlmcB = vlmcB,
+                               vlmcC = vlmcC, 
+                               n.time_series = n.time_series[i], 
+                               n.neighbors = n.neighbors, 
+                               K = K,
+                               n = n,
+                               n.random_splits = 100, 
+                               n.iter = 100))
+  },future.seed = future_seeds[i])
+  plan(sequential)
+  
+  scenario_3_classif_results[i, ] = rowMeans(sapply(current_sim_res, "[[", 1))
+  scenario_3_clustering_results[i, ] = rowMeans(sapply(current_sim_res, "[[", 2))
+  
+  if(i == 1)
+  {
+    colnames(scenario_3_classif_results) = names(rowMeans(sapply(current_sim_res, "[[", 1)))
+    colnames(scenario_3_clustering_results) = names(rowMeans(sapply(current_sim_res, "[[", 2)))
+  }
+  
+  cat(paste("Finished sim", i))
+  
+}
+
+scenario_3_classif_results
+
+scenario_3_clustering_results
+
+# SAVE Results 
+Scenario_3_tables = list(scenario_3_classif_results = scenario_3_classif_results, 
+                         scenario_3_clustering_results = scenario_3_clustering_results)
+
+saveRDS(Scenario_3_tables, "Scenario_3_tables.RDS")
+
+
+```
+
+# Load Results
+
+```{r}
+Scenario_1_tables <- readRDS("~/Desktop/VLMC_files/Github-Files/Scenario_1_tables.RDS")
+Scenario_2_tables <- readRDS("~/Desktop/VLMC_files/Github-Files/Scenario_2_tables.RDS")
+Scenario_3_tables <- readRDS("~/Desktop/VLMC_files/Github-Files/Scenario_3_tables.RDS")
+
+Scenario_1_tables
+Scenario_2_tables
+Scenario_3_tables
+```
+
+# Process LaTeX table
+```{r eval=FALSE, include=T}
+library(magrittr)
+
+# function to write code for latex tables 
+to_latex_table = function(scenario_tables)
+{
+  # process classification 
+  
+  latex_classif_code = scenario_tables[[1]] %>% formatC(format = "f", digits = 2) %>% 
+    apply(MARGIN = 1, FUN = paste, collapse = " & ")
+  latex_classif_code = paste(paste("$",names(latex_classif_code), "$ & "), latex_classif_code) %>% 
+    paste(collapse = " \\ ")
+  
+  # process clustering
+  
+  latex_cluster_code = scenario_tables[[2]] %>%  formatC(format = "f", digits = 2) %>% 
+    apply(MARGIN = 1, FUN = paste, collapse = " & ")
+  latex_cluster_code = paste(paste("$",names(latex_cluster_code), "$ & "), latex_cluster_code) %>% 
+    paste(collapse = " \\ ")
+  
+  latex_code = list(latex_classif_code = latex_classif_code, 
+                    latex_cluster_code = latex_cluster_code)
+  
+  return(latex_code)
+  
+}
+
+# Scenario 1
+to_latex_table(Scenario_1_tables)
+
+# Scenario 2
+to_latex_table(Scenario_2_tables)
+
+# Scenario 3
+to_latex_table(Scenario_3_tables)
 
 ```
 

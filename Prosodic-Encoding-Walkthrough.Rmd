@@ -57,64 +57,95 @@ We now provide the function to perform the phonological encoding.  The function 
 Phonological_Encoding = function(input_file, output_file = "", dictionary_type = c("Webster", "Cambridge"), elements = c("the", "a", "at")) {
   
   # Parse_Token function: Determines the prosodic encoding of a word based on its syllables, stress, and whether it begins a prosodic word
-  Parse_Token <- function(Word, Num_Sil,Stressed_syllable,Output_file,Phonetic_word)
+ Parse_Token <- function(Word, Num_Sil, Stressed_syllable, Output_file, Phonetic_word)
 {       
-	prosodyString= ""
-     if (Num_Sil > 0) # fix to >
-     {
-         	if (Num_Sil == 1)
-     	{	#### Check if HER and IT, YOU are object or subject pronoums : also look for This That (No one)
-     		if (is.element(toupper(Word), c("ME", "US", "THEM", "HIM", "HER", "YOU", "IT", "A", "AN","OF", "THE"))) #, "FOR", "NOR", "BUT", "OR", "YET", "SO"))) #### One syllable and these are non-stressed pronouns that join main prosodic words
-     		#ARE ALL ONE SYLLABLE CONJUNCTIONS PART OF THIS??????
-     		{
-                if (Phonetic_word == 1) ## This means it is the beginning of a prosodic word, so it is a 2
+    # Initialize an empty string to hold the prosodic encoding for the word
+    prosodyString = ""
+    
+    # Proceed only if the word has one or more syllables
+    if (Num_Sil > 0) # Ensure Num_Sil is positive
+    {
+        # Special case for words with exactly one syllable
+        if (Num_Sil == 1)
+        {	
+            #### Check if the word is a non-stressed pronoun or determiner ####
+            if (is.element(toupper(Word), c("ME", "US", "THEM", "HIM", "HER", "YOU", "IT", "A", "AN", "OF", "THE", "FOR"))) 
+            {
+                # Check if this is the beginning of a prosodic word
+                if (Phonetic_word == 1) 
                 { 
-                    prosodyString="2 "
-                    Phonetic_word <- 0
-			    } else ## middle of prosodic word, so a 0
-                    prosodyString="0 "     			
+                    # Assign prosody code 2 (indicates start of a prosodic word)
+                    prosodyString = "2 "
+                    Phonetic_word <- 0 # Reset Phonetic_word flag
+			    } 
+                else 
+                {
+                    # Assign prosody code 0 (indicates middle of a prosodic word)
+                    prosodyString = "0 "     			
+     		    } 
      		} 
-     		else
-     		{
-                if (Phonetic_word == 1) ## This means it is the beginning of a prosodic word, so it is a 2
+            # Case for one-syllable word that is not a non-stressed pronoun/determiner
+            else
+            {
+                # Check if this is the beginning of a prosodic word
+                if (Phonetic_word == 1) 
                 { 
-                   prosodyString= "3 " 
-                    #Phonetic_word <- 0. not correct, because we know this word was a prosodic word itself, so move to next
-			    } else ## middle of prosodic word, so a 0
-                    prosodyString="1 " # for me 
-                    Phonetic_word=1
-     			
+                    # Assign prosody code 3 (indicates stressed prosodic word)
+                    prosodyString = "3 " 
+			    } 
+                else 
+                {
+                    # Assign prosody code 1 (stressed syllable in middle of prosodic word)
+                    prosodyString = "1 " 
+                    Phonetic_word = 1 # Update Phonetic_word to indicate this word was prosodic
+     		    }	
      		}
-     		
-     	
-     	}else 
+     	} 
+        # Case for multi-syllable words
+     	else 
      	{
-     		prosodyString= ""
-     		for(i in 1: Num_Sil)
+     		prosodyString = "" # Initialize/clear the prosody string
+            # Loop through each syllable in the word
+     		for (i in 1: Num_Sil)
      		{
-     			if ((Stressed_syllable == i) && (Phonetic_word == 1) && i==1)
-                     {
-                     	prosodyString= paste(prosodyString, "3 ", sep="")
-                     	Phonetic_word = 0
-                     	}
+                # If current syllable is stressed and it's the first syllable in the prosodic word
+     			if ((Stressed_syllable == i) && (Phonetic_word == 1) && i == 1)
+                {
+                    # Assign prosody code 3 (stressed first syllable in prosodic word)
+                    prosodyString = paste(prosodyString, "3 ", sep = "")
+                    Phonetic_word = 0 # Reset Phonetic_word flag
+                }
+                # If current syllable is stressed but not the first syllable in the prosodic word
      			else if ((Stressed_syllable == i) && (Phonetic_word == 0))
-     				prosodyString= paste(prosodyString, "1 ", sep="")
+                {
+                    # Assign prosody code 1 (stressed syllable in middle of prosodic word)
+     				prosodyString = paste(prosodyString, "1 ", sep = "")
+                }
+                # If current syllable is not stressed and it's the first syllable in the prosodic word
      			else if ((Stressed_syllable != i) && (Phonetic_word == 1))
      			{
-     				prosodyString= paste(prosodyString, "2 ", sep="")
-     				Phonetic_word = 0
+                    # Assign prosody code 2 (unstressed first syllable in prosodic word)
+     				prosodyString = paste(prosodyString, "2 ", sep = "")
+                    Phonetic_word = 0 # Reset Phonetic_word flag
      			}
+                # If current syllable is not stressed and not the first syllable in the prosodic word
 				else if ((Stressed_syllable != i) && (Phonetic_word == 0))
-     				prosodyString= paste(prosodyString, "0 ", sep="")
+                {
+                    # Assign prosody code 0 (unstressed syllable in middle of prosodic word)
+     				prosodyString = paste(prosodyString, "0 ", sep = "")
+                }
      		}
-     		Phonetic_word = 1
+     		Phonetic_word = 1 # Reset Phonetic_word flag for the next word
      	}	
-     	
     }
     
-    cat(prosodyString ,file=Output_file, append=TRUE) 
+    # Write the prosody string to the output file and append it
+    cat(prosodyString, file = Output_file, append = TRUE) 
+    
+    # Return the updated Phonetic_word flag and the prosody string
     return(c(Phonetic_word, prosodyString))
- }
+}
+
   
   ##################################################################################################
   ##################################################################################################
@@ -269,7 +300,7 @@ Phonological_Encoding = function(input_file, output_file = "", dictionary_type =
 To showcase the function, let us first create a txt file containing two sentences.  
 
 ```{r}
-text = "The woman walked to the store."
+text = "Police are hunting for answers on what caused an explosion that injured twenty nine people in New York's Chelsea neighborhood shortly before a second suspicious device was found nearby."
 write(text, file = "sample_text.txt")
 ```
 
@@ -293,7 +324,7 @@ The `sample_text_prosodic_output.txt` file will contain the phonological encodin
 suppressWarnings(output_file_text <- readLines("sample_text_prosodic_output.txt"))
 
 output_file_text
-```
+``` 
 
 
 The `sample_text_log.txt` file will contain the log of the number of syllables and stress of each word, and the corresponding phonological encoding.  

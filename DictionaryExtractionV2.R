@@ -444,16 +444,14 @@ sAsBRIT= function(Word, type, country = "uk")
 	cleanScript= html %>% html_nodes(".dpos-h") %>% html_text(trim = T) %>% strsplit(split="\n") 
 	
 	entries= html %>% html_nodes(".dhw") %>% html_text()
-	entry=entries[1]
-	#find proper entry 
-	if(!is.na(entry)&& Word!=entry)
+	entry = entries[which(tolower(entries) == tolower(Word))][1]
+	
+	if(is.na(entry))
 	{
-		if(!is.na(which(entries==Word)[1])){
-			entry=entries[which(entries==Word)[1]]
-		}
+	  entry = entries[1]
 	}
 	
-	if(length(cleanScript)==0 ||length(unlist(tokenize_words(entries[1])))>1)
+	if(length(cleanScript)==0 ||length(unlist(tokenize_words(entry)))>1)
 	{
 		print("Calling Merriam Webster dictionary because phonetic spelling was not given or  dictionary entry may have been incorrect")
 		return(sAsBRITBackUp(Word, type))
