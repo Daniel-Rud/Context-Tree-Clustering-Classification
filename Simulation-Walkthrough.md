@@ -404,9 +404,7 @@ for *D* and *Δ* are performed here.
 ### Clustering Specific Distances
 
 Here, we compute the distance
-*D*<sub>*α*<sub>|*χ*|</sub></sub><sup>\*</sup>. Note that the for loop
-over alpha divisor allows the user to investigate a set of alpha divisor
-values. However, only the alpha divisor |*χ*|<sup>2</sup>/4 is used.
+*D*<sub>*α*<sub>|*χ*|</sub></sub><sup>\*</sup>.
 
     ##############################################################################################
     ##############################################################################################
@@ -697,6 +695,9 @@ We will now perform all the simulations for Scenarios 1, 2, and 3 in the
 main manuscript. First, we define some general functions for the
 clustering and classification simulations.
 
+    ##############################################################################################
+    ## Performs a SINGLE iteration of a Simulation Scenario with defined parameters
+    ##############################################################################################
     run_VLMC_simulation = function(vlmcA, vlmcB,
                                    vlmcC = NULL,
                                    n.time_series = 100, n.neighbors = 7, 
@@ -1044,10 +1045,16 @@ clustering and classification simulations.
       rownames(scenario_clustering_mutual_info) = paste0("T = ", n.time_series)
       
       
+      ##############################################################################################
+      ## `for` loop iterates over different values for T -- 50, 100, 500, 1000, 2000
+      ##############################################################################################
       for(i in 1:length(n.time_series))
       {
         p <- progressor(steps = n.simulations)
         
+        ##############################################################################################
+        ## `future_lapply` call runs --   500   -- simulation scenario replicates in PARALLEL
+        ##############################################################################################
         plan(multisession)
         current_sim_res = future_lapply(1:n.simulations, FUN = function(x)
         {
