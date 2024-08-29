@@ -97,6 +97,10 @@ If you would like to run the results chunk by chunk, please refer to the
 
     ## Loading required package: future.apply
 
+    if (!require("progressr")) install.packages("progressr", dependencies = TRUE); library("progressr")
+
+    ## Loading required package: progressr
+
 # Loading Neccessary Functions
 
 We first need some relevant helper functions.
@@ -104,6 +108,7 @@ We first need some relevant helper functions.
     # reverse a string
     strReverse <- function(x)
       sapply(lapply(strsplit(x, NULL), rev), paste, collapse="")
+
 
 
     # generate all state space paths from a VLMC tree object 
@@ -117,16 +122,26 @@ We first need some relevant helper functions.
         #plot(dendrogram)
         for(i in 1:length(names(dendrogram)))
         {
-          string= capture.output(dendrogram[i])
+          string= capture.output( dendrogram[i])
           entries= which(grepl("$", string, fixed=TRUE))
           paths= string[entries]
-          for( j in 1: length(paths))
+          
+          # this is for the weird case when the name of a path of context 
+          # length 1 was not the same as the edge text value
+          if( (length(paths) == 1) && (grep("$", paths) == 1))
           {
-            paths[j]= gsub("$", "", paths[j], fixed=TRUE)
-            paths[j]= gsub("`", "", paths[j], fixed=TRUE)
-            paths[j]= gsub("NA", "", paths[j], fixed=TRUE)
+              allPaths = append(allPaths, attr(dendrogram[[i]], "edgetext"))
+              
+          }else
+          {
+            for( j in 1: length(paths))
+            {
+              paths[j]= gsub("$", "", paths[j], fixed=TRUE)
+              paths[j]= gsub("`", "", paths[j], fixed=TRUE)
+              paths[j]= gsub("NA", "", paths[j], fixed=TRUE)
+            }
+            allPaths=append(allPaths, paths)
           }
-          allPaths=append(allPaths, paths)
         }
       }
       return(allPaths)  
@@ -249,9 +264,17 @@ Some functions for K nearest neighbors (KNN).
       for (i in 1:length(test_sample_index))
       {
         distances = fulldistanceMatrix[,test_sample_index[i]]
-        dist_to_train_data = distances[train_sample_index]
+        
+        curr_train_index = train_sample_index
+        
+        if(test_sample_index[i] %in% train_sample_index)
+        {
+          curr_train_index = curr_train_index[-which(curr_train_index == test_sample_index[i])]
+        }
+        
+        dist_to_train_data = distances[curr_train_index]
         order_dist = order(dist_to_train_data)[1:n.neighbors]
-        which_train = train_sample_index[order_dist]
+        which_train = curr_train_index[order_dist]
         
         result[i] = as.numeric(majorityVote(all_labels[which_train])$majority)
       }
@@ -262,24 +285,25 @@ Some functions for K nearest neighbors (KNN).
 
 We now define a function to measure cluster accuracy.
 
-    Mismatch <- function(mm, true_clusters, K)
-    {
-      sigma = permutations(n=K,r=K,v=1:K)
-      
-      Miss = length(which( true_clusters != mm))  ## for permutation 1, 2,... K
-      
-      mm_aux = mm
-      for (ind in 2:dim(sigma)[1])
-      {
+    Mismatch <- function(pred_clusters, true_clusters, K) {
+      sigma <- permutations(n = K, r = K, v = 1:K)  # Generate all label permutations
+      min_mismatches <- length(true_clusters)  # Initialize with maximum possible mismatches
+
+      for (i in 1:nrow(sigma)) {
+        # Remap the predicted clusters using the current permutation
+        permuted_pred <- pred_clusters
+        for (j in 1:K) {
+          permuted_pred[pred_clusters == j] <- sigma[i, j]
+        }
+
+        # Count mismatches between permuted clusters and true clusters
+        mismatches <- sum(permuted_pred != true_clusters)
         
-        for (j in 1:K)
-          mm_aux[which(mm == j)] = sigma[ind,j]
-        
-        Miss[ind] =  length(which( true_clusters != mm_aux))
-        
+        # Update minimum mismatches
+        min_mismatches <- min(min_mismatches, mismatches)
       }
-      
-      return(min(Miss))
+
+      return(min_mismatches)
     }
 
 ## Simulation Study – Scenario 1
@@ -726,7 +750,7 @@ clustering and classification simulations.
       vlmcs = vlmcs[sample(n)]
       
       # true labels of shuffled VLMCs
-      all_labels = do.call("rbind", lapply(vlmcs, "[[", 1))
+      all_labels = sapply(vlmcs, "[[", 1)
       
       ##############################################################################################
       # compute distances
@@ -749,7 +773,7 @@ clustering and classification simulations.
           pdistanceMatrix[index,j]= pDistance(vlmcs[[index]][[2]], vlmcs[[j]][[2]], vlmcs[[index]][[3]], vlmcs[[j]][[3]])
         
       }
-      pdistanceMatrix[is.na(pdistanceMatrix)] = 0
+
       pfulldistanceMatrix = pdistanceMatrix + t(pdistanceMatrix)
       
       ##############################################################################################
@@ -969,85 +993,104 @@ clustering and classification simulations.
       clustering_results = clustering_results / n.iter
       
       return_list = list(classif_results = classif_results, 
-                         clustering_results = clustering_results[,1])
+                         clustering_acc = clustering_results[,1], 
+                         clustering_rand = clustering_results[,2], 
+                         clustering_mutual_info = clustering_results[,3])
       
       return(return_list)
     }
 
-## Scenario 1
-
-    dataA = c(1, 3, 3, 3, 0, 0, 2, 1, 3, 3, 3, 2, 1, 0, 0, 3, 0, 4, 3, 2, 1, 2, 1, 0, 0, 4, 2, 1, 0, 3, 3, 0, 3, 3, 3, 3, 0, 0, 2, 1, 3, 0, 0, 3, 3, 3, 2, 1, 0, 0, 3, 0, 3, 3, 0, 3, 0, 3, 3, 0, 3, 0, 3, 0, 3, 4, 3, 2, 1, 0, 0, 3, 2, 1, 2, 1, 0, 3, 3, 3, 3, 2, 1, 3, 3, 0, 2, 1, 4, 3, 0, 3, 3, 3, 3, 4, 3, 0, 3, 3)
-
-    dataB = c(3, 1, 3, 1, 3, 3, 3, 0, 2, 1, 2, 1, 3, 3, 3, 3, 3, 4, 3, 0, 3, 3, 0, 3, 3, 3, 0, 0, 3, 0, 3, 0, 3, 2, 1, 0, 0, 3, 3, 3, 0, 2, 0, 1, 0, 2, 1, 0, 0, 3, 2, 0, 1, 2, 0, 1, 0, 4, 3, 0, 3, 0, 2, 1, 4, 3, 1, 1, 0, 3, 3, 3, 3, 2, 1, 3, 3, 3, 3, 3, 0, 3, 3, 2, 1, 3, 2, 1, 3, 0, 3, 0, 0, 3, 4, 3, 2, 1, 4, 3, 0, 3, 3, 0, 4, 3, 0, 0, 3, 0, 3, 3, 2, 1, 0, 3, 2, 1, 3, 3, 3, 2, 1, 0, 3, 3, 4, 2, 1, 3, 4, 3, 2, 1, 3, 2, 0, 1, 3, 2)
-
-    # Create pop VLMCs
-    vlmcA = vlmc(dataA)
-    vlmcB = vlmc(dataB)
-
-    draw(vlmcA)
-    draw(vlmcB)
-
-    n.time_series = c(50, 100,500,1000, 2000) ## how many observations of the chain we are generating
-    scenario_1_classif_results = matrix(data = 0, nrow = length(n.time_series), 
-                                        ncol = 10)
-    scenario_1_clustering_results = matrix(data = 0, nrow = length(n.time_series), 
-                                        ncol = 5)
-
-    rownames(scenario_1_classif_results) = paste0("T = ", n.time_series)
-    rownames(scenario_1_clustering_results) = paste0("T = ", n.time_series)
-
-
-    n.simulations = 500
-    n = 80
-    n.neighbors = 7
-    K = 2
-
-    future_seeds = c(8432, 4901,  219, 6553,  138)
-
-
-    for(i in 1:length(n.time_series))
+    run_scenario = function(dataA, dataB, dataC = NULL,
+                            n.time_series = c(50, 100,500,1000, 2000), 
+                            n.simulations = 500,
+                            n = 80,
+                            n.neighbors = 7,
+                            K = 2, 
+                            n.random_splits = 100, 
+                            n.iter = 100,
+                            future_seeds = c(8432, 4901,  219, 6553,  138))
     {
       
-      plan(multisession)
-      current_sim_res = future_lapply(1:n.simulations, FUN = function(x)
-      {
-        return(run_VLMC_simulation(vlmcA = vlmcA, 
-                                   vlmcB = vlmcB, 
-                                   n.time_series = n.time_series[i], 
-                                   n.neighbors = n.neighbors, 
-                                   K = K,
-                                   n = n,
-                                   n.random_splits = 100, 
-                                   n.iter = 100))
-      },future.seed = future_seeds[i])
-      plan(sequential)
       
-      scenario_1_classif_results[i, ] = rowMeans(sapply(current_sim_res, "[[", 1))
-      scenario_1_clustering_results[i, ] = rowMeans(sapply(current_sim_res, "[[", 2))
-      
-      if(i == 1)
+      # Create pop VLMCs
+      vlmcA = vlmc(dataA)
+      vlmcB = vlmc(dataB)
+      vlmcC = NULL
+      if(!is.null(dataC)[1])
       {
-        colnames(scenario_1_classif_results) = names(rowMeans(sapply(current_sim_res, "[[", 1)))
-        colnames(scenario_1_clustering_results) = names(rowMeans(sapply(current_sim_res, "[[", 2)))
+        vlmcC = vlmc(dataC, threshold.gen = 100)
       }
       
-      cat(paste("Finished sim", i))
+      draw(vlmcA)
+      draw(vlmcB)
+      if(!is.null(vlmcC))
+      {
+        draw(vlmcC)
+      }
       
+      scenario_classif_results = matrix(data = 0, nrow = length(n.time_series), 
+                                          ncol = 10)
+      scenario_clustering_acc = matrix(data = 0, nrow = length(n.time_series), 
+                                         ncol = 5)
+      scenario_clustering_rand_index = matrix(data = 0, nrow = length(n.time_series), 
+                                                ncol = 5)
+      
+      scenario_clustering_mutual_info = matrix(data = 0, nrow = length(n.time_series), 
+                                                 ncol = 5) 
+      
+      rownames(scenario_classif_results) = paste0("T = ", n.time_series)
+      rownames(scenario_clustering_acc) = paste0("T = ", n.time_series)
+      rownames(scenario_clustering_rand_index) = paste0("T = ", n.time_series)
+      rownames(scenario_clustering_mutual_info) = paste0("T = ", n.time_series)
+      
+      
+      for(i in 1:length(n.time_series))
+      {
+        p <- progressor(steps = n.simulations)
+        
+        plan(multisession)
+        current_sim_res = future_lapply(1:n.simulations, FUN = function(x)
+        {
+            
+          result = run_VLMC_simulation(vlmcA = vlmcA, 
+                                     vlmcB = vlmcB, 
+                                     vlmcC = vlmcC,
+                                     n.time_series = n.time_series[i], 
+                                     n.neighbors = n.neighbors, 
+                                     K = K,
+                                     n = n,
+                                     n.random_splits = n.random_splits, 
+                                     n.iter = n.iter)
+          p()
+          return(result)
+        },future.seed = future_seeds[i])
+        plan(sequential)
+        
+        scenario_classif_results[i, ] = rowMeans(sapply(current_sim_res, "[[", 1))
+        scenario_clustering_acc[i, ] = rowMeans(sapply(current_sim_res, "[[", 2))
+        scenario_clustering_rand_index[i, ] = rowMeans(sapply(current_sim_res, "[[", 3))
+        scenario_clustering_mutual_info[i, ] = rowMeans(sapply(current_sim_res, "[[", 4))
+        
+        if(i == 1)
+        {
+          colnames(scenario_classif_results) = names(rowMeans(sapply(current_sim_res, "[[", 1)))
+          colnames(scenario_clustering_acc) = names(rowMeans(sapply(current_sim_res, "[[", 2)))
+          colnames(scenario_clustering_rand_index) = names(rowMeans(sapply(current_sim_res, "[[", 3)))
+          colnames(scenario_clustering_mutual_info) = names(rowMeans(sapply(current_sim_res, "[[", 4)))
+          
+        }
+        
+        cat(paste("Finished sim", i))
+        
+      }
+
+      scenario_tables = list(scenario_classif_results = scenario_classif_results, 
+                             scenario_clustering_acc = scenario_clustering_acc, 
+                             scenario_clustering_rand_index = scenario_clustering_rand_index, 
+                             scenario_clustering_mutual_info = scenario_clustering_mutual_info)
+      
+      return(scenario_tables)
     }
-
-    scenario_1_classif_results[,1:5]
-    scenario_1_classif_results[,6:10]
-
-    scenario_1_clustering_results
-
-
-    # SAVE Results 
-    Scenario_1_tables = list(scenario_1_classif_results = scenario_1_classif_results, 
-                             scenario_1_clustering_results = scenario_1_clustering_results)
-
-    saveRDS(Scenario_1_tables, "Scenario_1_tables.RDS")
-
-# Scenario 2
 
     read_time_series = function(file)
     {
@@ -1058,72 +1101,61 @@ clustering and classification simulations.
       return(data)
     }
 
-    dataA = read_time_series("Scenario2_dataA.txt")
-    dataB = read_time_series("Scenario2_dataB.txt")
+## Scenario 1
+
+    dataA = c(1, 3, 3, 3, 0, 0, 2, 1, 3, 3, 3, 2, 1, 0, 0, 3, 0, 4, 3, 2, 1, 2, 1, 0, 0, 4, 2, 1, 0, 3, 3, 0, 3, 3, 3, 3, 0, 0, 2, 1, 3, 0, 0, 3, 3, 3, 2, 1, 0, 0, 3, 0, 3, 3, 0, 3, 0, 3, 3, 0, 3, 0, 3, 0, 3, 4, 3, 2, 1, 0, 0, 3, 2, 1, 2, 1, 0, 3, 3, 3, 3, 2, 1, 3, 3, 0, 2, 1, 4, 3, 0, 3, 3, 3, 3, 4, 3, 0, 3, 3)
+
+    dataB = c(3, 1, 3, 1, 3, 3, 3, 0, 2, 1, 2, 1, 3, 3, 3, 3, 3, 4, 3, 0, 3, 3, 0, 3, 3, 3, 0, 0, 3, 0, 3, 0, 3, 2, 1, 0, 0, 3, 3, 3, 0, 2, 0, 1, 0, 2, 1, 0, 0, 3, 2, 0, 1, 2, 0, 1, 0, 4, 3, 0, 3, 0, 2, 1, 4, 3, 1, 1, 0, 3, 3, 3, 3, 2, 1, 3, 3, 3, 3, 3, 0, 3, 3, 2, 1, 3, 2, 1, 3, 0, 3, 0, 0, 3, 4, 3, 2, 1, 4, 3, 0, 3, 3, 0, 4, 3, 0, 0, 3, 0, 3, 3, 2, 1, 0, 3, 2, 1, 3, 3, 3, 2, 1, 0, 3, 3, 4, 2, 1, 3, 4, 3, 2, 1, 3, 2, 0, 1, 3, 2)
 
 
-    # Create pop VLMCs
-    vlmcA = vlmc(dataA)
-    vlmcB = vlmc(dataB)
-
-    draw(vlmcA)
-    draw(vlmcB)
-
-    n.time_series = c(50, 100,500,1000, 2000) ## how many observations of the chain we are generating
-    scenario_2_classif_results = matrix(data = 0, nrow = length(n.time_series), 
-                                        ncol = 10)
-    scenario_2_clustering_results = matrix(data = 0, nrow = length(n.time_series), 
-                                        ncol = 5)
-                                        
-    rownames(scenario_2_classif_results) = paste0("T = ", n.time_series)
-    rownames(scenario_2_clustering_results) = paste0("T = ", n.time_series)
-
+    n.time_series = c(50, 100,500,1000, 2000)
     n.simulations = 500
     n = 80
     n.neighbors = 7
     K = 2
-
     future_seeds = c(8432, 4901,  219, 6553,  138)
+    n.random_splits = 100
+    n.iter = 100
 
-
-    for(i in 1:length(n.time_series))
-    {
-      
-      plan(multisession)
-      current_sim_res = future_lapply(1:n.simulations, FUN = function(x)
-      {
-        return(run_VLMC_simulation(vlmcA = vlmcA, 
-                                   vlmcB = vlmcB, 
-                                   n.time_series = n.time_series[i], 
-                                   n.neighbors = n.neighbors, 
-                                   K = K,
-                                   n = n,
-                                   n.random_splits = 100, 
-                                   n.iter = 100))
-      },future.seed = future_seeds[i])
-      plan(sequential)
-      
-      scenario_2_classif_results[i, ] = rowMeans(sapply(current_sim_res, "[[", 1))
-      scenario_2_clustering_results[i, ] = rowMeans(sapply(current_sim_res, "[[", 2))
-      
-      if(i == 1)
-      {
-        colnames(scenario_2_classif_results) = names(rowMeans(sapply(current_sim_res, "[[", 1)))
-        colnames(scenario_2_clustering_results) = names(rowMeans(sapply(current_sim_res, "[[", 2)))
-      }
-      
-      cat(paste("Finished sim", i))
-      
-    }
-
-    scenario_2_classif_results[,1:5]
-    scenario_2_classif_results[,6:10]
-
-    scenario_2_clustering_results
 
     # SAVE Results 
-    Scenario_2_tables = list(scenario_2_classif_results = scenario_2_classif_results, 
-                             scenario_2_clustering_results = scenario_2_clustering_results)
+    with_progress(Scenario_1_tables <- run_scenario(dataA, dataB, dataC = NULL,
+                                     n.time_series = n.time_series, 
+                                     n.simulations = n.simulations,
+                                     n = n,
+                                     n.neighbors = n.neighbors,
+                                     K = K, 
+                                     n.random_splits = n.random_splits, 
+                                     n.iter = n.iter, 
+                                     future_seeds = future_seeds))
+
+    saveRDS(Scenario_1_tables, "Scenario_1_tables.RDS")
+
+# Scenario 2
+
+    dataA = read_time_series("Scenario2_dataA.txt")
+    dataB = read_time_series("Scenario2_dataB.txt")
+
+
+    n.time_series = c(50, 100,500,1000, 2000)
+    n.simulations = 500
+    n = 80
+    n.neighbors = 7
+    K = 2
+    future_seeds = c(8432, 4901,  219, 6553,  138)
+    n.random_splits = 100
+    n.iter = 100
+
+    with_progress(Scenario_2_tables <- run_scenario(dataA, dataB, dataC = NULL,
+                                     n.time_series = n.time_series, 
+                                     n.simulations = n.simulations,
+                                     n = n,
+                                     n.neighbors = n.neighbors,
+                                     K = K, 
+                                     n.random_splits = n.random_splits, 
+                                     n.iter = n.iter, 
+                                     future_seeds = future_seeds))
+
 
     saveRDS(Scenario_2_tables, "Scenario_2_tables.RDS")
 
@@ -1131,72 +1163,28 @@ clustering and classification simulations.
 
     dataA = read_time_series("Scenario3_dataA.txt")
     dataB = read_time_series("Scenario3_dataB.txt")
-    dataC = read_time_series("Scenario3_dataC.txt")
+    dataC = readRDS("Scenario3_dataC.RDS")
 
-
-    # Create pop VLMCs
-    vlmcA = vlmc(dataA)
-    vlmcB = vlmc(dataB)
-    # changed threshold gen solely to influence construction of population vlmc 
-    vlmcC = vlmc(dataC, threshold.gen = 100)
-
-    draw(vlmcA)
-    draw(vlmcB)
-    draw(vlmcC)
-
-
-    n.time_series = c(50, 100,500,1000, 2000) ## how many observations of the chain we are generating
-    scenario_3_classif_results = matrix(data = 0, nrow = length(n.time_series), 
-                                        ncol = 10)
-    scenario_3_clustering_results = matrix(data = 0, nrow = length(n.time_series), 
-                                        ncol = 5)
-    rownames(scenario_3_classif_results) = paste0("T = ", n.time_series)
-    rownames(scenario_3_clustering_results) = paste0("T = ", n.time_series)
+    n.time_series = c(50, 100,500,1000, 2000)
     n.simulations = 500
     n = 120
     n.neighbors = 7
     K = 3
     future_seeds = c(8432, 4901,  219, 6553,  138)
+    n.random_splits = 100
+    n.iter = 100
 
-
-    for(i in 1:length(n.time_series))
-    {
-      
-      plan(multisession)
-      current_sim_res = future_lapply(1:n.simulations, FUN = function(x)
-      {
-        return(run_VLMC_simulation(vlmcA = vlmcA, 
-                                   vlmcB = vlmcB,
-                                   vlmcC = vlmcC, 
-                                   n.time_series = n.time_series[i], 
-                                   n.neighbors = n.neighbors, 
-                                   K = K,
-                                   n = n,
-                                   n.random_splits = 100, 
-                                   n.iter = 100))
-      },future.seed = future_seeds[i])
-      plan(sequential)
-      
-      scenario_3_classif_results[i, ] = rowMeans(sapply(current_sim_res, "[[", 1))
-      scenario_3_clustering_results[i, ] = rowMeans(sapply(current_sim_res, "[[", 2))
-      
-      if(i == 1)
-      {
-        colnames(scenario_3_classif_results) = names(rowMeans(sapply(current_sim_res, "[[", 1)))
-        colnames(scenario_3_clustering_results) = names(rowMeans(sapply(current_sim_res, "[[", 2)))
-      }
-      
-      cat(paste("Finished sim", i))
-      
-    }
-
-    scenario_3_classif_results
-
-    scenario_3_clustering_results
-
-    # SAVE Results 
-    Scenario_3_tables = list(scenario_3_classif_results = scenario_3_classif_results, 
-                             scenario_3_clustering_results = scenario_3_clustering_results)
+    with_progress(Scenario_3_tables <- run_scenario( dataA = dataA,
+                                                     dataB = dataB, 
+                                                     dataC = dataC,
+                                                     n.time_series = n.time_series, 
+                                                     n.simulations = n.simulations,
+                                                     n = n,
+                                                     n.neighbors = n.neighbors,
+                                                     K = K, 
+                                                     n.random_splits = n.random_splits, 
+                                                     n.iter = n.iter, 
+                                                     future_seeds = future_seeds))
 
     saveRDS(Scenario_3_tables, "Scenario_3_tables.RDS")
 
@@ -1208,19 +1196,19 @@ clustering and classification simulations.
 
     Scenario_1_tables
 
-    ## $scenario_1_classif_results
+    ## $scenario_classif_results
     ##          LOOCV- KNN - tDistance LOOCV- KNN - pDistance
-    ## T = 50                 0.538925               0.499425
-    ## T = 100                0.798400               0.555900
-    ## T = 500                0.987600               0.998400
-    ## T = 1000               0.999025               1.000000
-    ## T = 2000               0.999100               1.000000
+    ## T = 50                 0.497475               0.484825
+    ## T = 100                0.761575               0.481425
+    ## T = 500                0.983575               0.997625
+    ## T = 1000               0.998375               1.000000
+    ## T = 2000               0.998850               1.000000
     ##          LOOCV- KNN - D_alpha_|chi|* LOOCV- KNN - D_alpha_med*
-    ## T = 50                      0.543100                  0.489775
-    ## T = 100                     0.944425                  0.654025
-    ## T = 500                     0.999650                  0.997200
-    ## T = 1000                    1.000000                  0.999925
-    ## T = 2000                    1.000000                  1.000000
+    ## T = 50                        0.4967                  0.489775
+    ## T = 100                       0.9236                  0.654025
+    ## T = 500                       0.9994                  0.997200
+    ## T = 1000                      1.0000                  0.999925
+    ## T = 2000                      1.0000                  1.000000
     ##          LOOCV- KNN - Classic Train/Test- LOOCV- KNN - tDistance
     ## T = 50               0.666875                          0.4933250
     ## T = 100              0.669725                          0.7626375
@@ -1246,7 +1234,7 @@ clustering and classification simulations.
     ## T = 1000                             0.9999483                        0.5312508
     ## T = 2000                             0.9999983                        0.5300342
     ## 
-    ## $scenario_1_clustering_results
+    ## $scenario_clustering_acc
     ##          K-Medoids - tDistance K-Medoids - pDistance
     ## T = 50               0.5369530             0.5157363
     ## T = 100              0.7815798             0.5170448
@@ -1265,21 +1253,61 @@ clustering and classification simulations.
     ## T = 500      0.5456190
     ## T = 1000     0.5482075
     ## T = 2000     0.5521608
+    ## 
+    ## $scenario_clustering_rand_index
+    ##          K-Medoids - tDistance K-Medoids - pDistance
+    ## T = 50               0.4978396             0.4944865
+    ## T = 100              0.6596997             0.4959745
+    ## T = 500              0.8771830             0.9741648
+    ## T = 1000             0.9937808             0.9956456
+    ## T = 2000             0.9942893             0.9995013
+    ##          K-Medoids - D_{alpha_{|chi|}}* K-Medoids - D_{alpha_{WCSS}}*
+    ## T = 50                        0.4952401                     0.4947199
+    ## T = 100                       0.8181923                     0.6404404
+    ## T = 500                       0.9931703                     0.9797671
+    ## T = 1000                      0.9999500                     0.9999500
+    ## T = 2000                      1.0000000                     0.9996513
+    ##          Classical KNN
+    ## T = 50       0.4998792
+    ## T = 100      0.5001676
+    ## T = 500      0.5003243
+    ## T = 1000     0.5010693
+    ## T = 2000     0.5021895
+    ## 
+    ## $scenario_clustering_mutual_info
+    ##          K-Medoids - tDistance K-Medoids - pDistance
+    ## T = 50             0.009527379           0.008736117
+    ## T = 100            0.193524792           0.010715805
+    ## T = 500            0.517371416           0.641443432
+    ## T = 1000           0.679148604           0.684364917
+    ## T = 2000           0.680279686           0.692005909
+    ##          K-Medoids - D_{alpha_{|chi|}}* K-Medoids - D_{alpha_{WCSS}}*
+    ## T = 50                       0.01163643                    0.01251554
+    ## T = 100                      0.37862074                    0.18836312
+    ## T = 500                      0.67756851                    0.65148552
+    ## T = 1000                     0.69302965                    0.69302965
+    ## T = 2000                     0.69314718                    0.69235850
+    ##          Classical KNN
+    ## T = 50     0.006301956
+    ## T = 100    0.006601703
+    ## T = 500    0.006797242
+    ## T = 1000   0.007629599
+    ## T = 2000   0.008994266
 
     Scenario_2_tables
 
-    ## $scenario_2_classif_results
+    ## $scenario_classif_results
     ##          LOOCV- KNN - tDistance LOOCV- KNN - pDistance
-    ## T = 50                 0.551300                0.49715
-    ## T = 100                0.586350                0.71785
-    ## T = 500                0.907925                0.74620
-    ## T = 1000               0.925725                0.99875
-    ## T = 2000               0.979325                1.00000
+    ## T = 50                 0.507375               0.482400
+    ## T = 100                0.533275               0.616325
+    ## T = 500                0.884575               0.700125
+    ## T = 1000               0.910225               0.998125
+    ## T = 2000               0.965900               1.000000
     ##          LOOCV- KNN - D_alpha_|chi|* LOOCV- KNN - D_alpha_med*
-    ## T = 50                      0.556150                  0.486400
-    ## T = 100                     0.790325                  0.656325
-    ## T = 500                     0.922450                  0.902825
-    ## T = 1000                    0.999825                  0.958675
+    ## T = 50                      0.499950                  0.486400
+    ## T = 100                     0.712025                  0.656325
+    ## T = 500                     0.893850                  0.902825
+    ## T = 1000                    0.999650                  0.958675
     ## T = 2000                    1.000000                  0.996750
     ##          LOOCV- KNN - Classic Train/Test- LOOCV- KNN - tDistance
     ## T = 50               0.667500                          0.5040525
@@ -1306,7 +1334,7 @@ clustering and classification simulations.
     ## T = 1000                             0.9623233                        0.5216092
     ## T = 2000                             0.9937283                        0.5235550
     ## 
-    ## $scenario_2_clustering_results
+    ## $scenario_clustering_acc
     ##          K-Medoids - tDistance K-Medoids - pDistance
     ## T = 50               0.5372260             0.5176978
     ## T = 100              0.5581182             0.5208182
@@ -1325,66 +1353,146 @@ clustering and classification simulations.
     ## T = 500      0.5471882
     ## T = 1000     0.5476665
     ## T = 2000     0.5502243
+    ## 
+    ## $scenario_clustering_rand_index
+    ##          K-Medoids - tDistance K-Medoids - pDistance
+    ## T = 50               0.4981455             0.4948498
+    ## T = 100              0.5038588             0.4969626
+    ## T = 500              0.7357873             0.5260151
+    ## T = 1000             0.7150170             0.9586639
+    ## T = 2000             0.6568383             0.9996500
+    ##          K-Medoids - D_{alpha_{|chi|}}* K-Medoids - D_{alpha_{WCSS}}*
+    ## T = 50                        0.4959564                     0.4940942
+    ## T = 100                       0.5241497                     0.4970169
+    ## T = 500                       0.6588100                     0.7495984
+    ## T = 1000                      0.9804506                     0.9171903
+    ## T = 2000                      0.9997500                     0.9998000
+    ##          Classical KNN
+    ## T = 50       0.5002927
+    ## T = 100      0.5002436
+    ## T = 500      0.5007760
+    ## T = 1000     0.5009403
+    ## T = 2000     0.5017291
+    ## 
+    ## $scenario_clustering_mutual_info
+    ##          K-Medoids - tDistance K-Medoids - pDistance
+    ## T = 50             0.007049709           0.008891907
+    ## T = 100            0.016082178           0.011414445
+    ## T = 500            0.323932410           0.048281009
+    ## T = 1000           0.288958274           0.618174112
+    ## T = 2000           0.234772665           0.692324457
+    ##          K-Medoids - D_{alpha_{|chi|}}* K-Medoids - D_{alpha_{WCSS}}*
+    ## T = 50                       0.01086350                    0.00920178
+    ## T = 100                      0.03201015                    0.01185864
+    ## T = 500                      0.23106862                    0.33933453
+    ## T = 1000                     0.65389970                    0.54500970
+    ## T = 2000                     0.69255952                    0.69267705
+    ##          Classical KNN
+    ## T = 50     0.006713668
+    ## T = 100    0.006664189
+    ## T = 500    0.007203981
+    ## T = 1000   0.007370225
+    ## T = 2000   0.008183160
 
     Scenario_3_tables
 
-    ## $scenario_3_classif_results
+    ## $scenario_classif_results
     ##          LOOCV- KNN - tDistance LOOCV- KNN - pDistance
-    ## T = 50                0.5548833                0.28595
-    ## T = 100               0.7932667                0.21125
-    ## T = 500               0.7272500                0.97330
-    ## T = 1000              0.7560000                1.00000
-    ## T = 2000              0.7906667                1.00000
+    ## T = 50                0.5191500              0.2775833
+    ## T = 100               0.7562167              0.1912000
+    ## T = 500               0.9370500              0.9530167
+    ## T = 1000              0.9966167              0.9998000
+    ## T = 2000              0.9938000              1.0000000
     ##          LOOCV- KNN - D_alpha_|chi|* LOOCV- KNN - D_alpha_med*
-    ## T = 50                     0.4744167                 0.3236333
-    ## T = 100                    0.8288333                 0.3519333
-    ## T = 500                    0.9996167                 0.9632500
-    ## T = 1000                   0.9999667                 0.9918000
-    ## T = 2000                   0.9977000                 0.9999667
+    ## T = 50                     0.3958000                 0.3242333
+    ## T = 100                    0.8002667                 0.3582667
+    ## T = 500                    0.9996000                 0.9813833
+    ## T = 1000                   1.0000000                 0.9998833
+    ## T = 2000                   0.9997500                 1.0000000
     ##          LOOCV- KNN - Classic Train/Test- LOOCV- KNN - tDistance
-    ## T = 50              0.4491667                          0.5143767
-    ## T = 100             0.4553333                          0.7453428
-    ## T = 500             0.4516667                          0.6579194
-    ## T = 1000            0.4245833                          0.6659911
-    ## T = 2000            0.3853000                          0.6806056
+    ## T = 50              0.4471333                          0.5148056
+    ## T = 100             0.4540167                          0.7459567
+    ## T = 500             0.4496167                          0.9285156
+    ## T = 1000            0.4230500                          0.9963417
+    ## T = 2000            0.3851333                          0.9924922
     ##          Train/Test- LOOCV- KNN - pDistance
-    ## T = 50                            0.2760100
-    ## T = 100                           0.1964317
-    ## T = 500                           0.9719233
-    ## T = 1000                          1.0000000
+    ## T = 50                            0.2756650
+    ## T = 100                           0.1933339
+    ## T = 500                           0.9636867
+    ## T = 1000                          0.9996478
     ## T = 2000                          1.0000000
     ##          Train/Test- LOOCV- KNN - D_alpha_|chi|*
-    ## T = 50                                 0.3903528
-    ## T = 100                                0.7917022
-    ## T = 500                                0.9986733
-    ## T = 1000                               0.9999689
-    ## T = 2000                               0.9864039
+    ## T = 50                                 0.3898628
+    ## T = 100                                0.7938933
+    ## T = 500                                0.9995150
+    ## T = 1000                               1.0000000
+    ## T = 2000                               0.9996194
     ##          Train/Test- LOOCV- KNN - D_alpha_med* Train/Test- LOOCV- KNN - Classic
-    ## T = 50                               0.3235694                        0.3602233
-    ## T = 100                              0.3503217                        0.3691950
-    ## T = 500                              0.9600061                        0.3866228
-    ## T = 1000                             0.9923717                        0.3793056
-    ## T = 2000                             0.9997417                        0.3596383
+    ## T = 50                               0.3240511                        0.3606467
+    ## T = 100                              0.3510333                        0.3681911
+    ## T = 500                              0.9840350                        0.3854783
+    ## T = 1000                             0.9997367                        0.3784844
+    ## T = 2000                             0.9999994                        0.3602933
     ## 
-    ## $scenario_3_clustering_results
+    ## $scenario_clustering_acc
     ##          K-Medoids - tDistance K-Medoids - pDistance
-    ## T = 50               0.5582463             0.3817453
-    ## T = 100              0.6334448             0.3807857
-    ## T = 500              0.6358165             0.8273597
-    ## T = 1000             0.6827180             0.9967833
-    ## T = 2000             0.5904812             0.9998667
+    ## T = 50               0.5545392             0.3811162
+    ## T = 100              0.6407672             0.3810467
+    ## T = 500              0.8403187             0.7685622
+    ## T = 1000             0.9966363             0.9866663
+    ## T = 2000             0.9951482             0.9976797
     ##          K-Medoids - D_{alpha_{|chi|}}* K-Medoids - D_{alpha_{WCSS}}*
-    ## T = 50                        0.4041017                     0.3481343
-    ## T = 100                       0.6877273                     0.3460660
-    ## T = 500                       0.9883325                     0.6962727
-    ## T = 1000                      1.0000000                     0.9843167
-    ## T = 2000                      0.9939220                     0.9999000
+    ## T = 50                        0.3986082                     0.3476618
+    ## T = 100                       0.7039310                     0.3461505
+    ## T = 500                       0.9893905                     0.7775063
+    ## T = 1000                      1.0000000                     0.9951167
+    ## T = 2000                      0.9996000                     0.9981708
     ##          Classical KNN
-    ## T = 50       0.4029032
-    ## T = 100      0.4052450
-    ## T = 500      0.4276772
-    ## T = 1000     0.4542878
-    ## T = 2000     0.4938758
+    ## T = 50       0.4009573
+    ## T = 100      0.4035565
+    ## T = 500      0.4238850
+    ## T = 1000     0.4474128
+    ## T = 2000     0.4859270
+    ## 
+    ## $scenario_clustering_rand_index
+    ##          K-Medoids - tDistance K-Medoids - pDistance
+    ## T = 50               0.5510758             0.3817731
+    ## T = 100              0.6888823             0.3833337
+    ## T = 500              0.8196758             0.7843478
+    ## T = 1000             0.9955517             0.9850710
+    ## T = 2000             0.9936292             0.9969490
+    ##          K-Medoids - D_{alpha_{|chi|}}* K-Medoids - D_{alpha_{WCSS}}*
+    ## T = 50                        0.3854020                     0.3403599
+    ## T = 100                       0.7166052                     0.3392050
+    ## T = 500                       0.9867121                     0.7910298
+    ## T = 1000                      1.0000000                     0.9942986
+    ## T = 2000                      0.9994700                     0.9975945
+    ##          Classical KNN
+    ## T = 50       0.5586429
+    ## T = 100      0.5590179
+    ## T = 500      0.5631986
+    ## T = 1000     0.5694950
+    ## T = 2000     0.5906837
+    ## 
+    ## $scenario_clustering_mutual_info
+    ##          K-Medoids - tDistance K-Medoids - pDistance
+    ## T = 50               0.2245324            0.04840757
+    ## T = 100              0.3548830            0.04792620
+    ## T = 500              0.7074786            0.67162159
+    ## T = 1000             1.0832856            1.05984125
+    ## T = 2000             1.0773869            1.08872153
+    ##          K-Medoids - D_{alpha_{|chi|}}* K-Medoids - D_{alpha_{WCSS}}*
+    ## T = 50                       0.07920898                    0.02003747
+    ## T = 100                      0.48423676                    0.01847935
+    ## T = 500                      1.06146851                    0.68506261
+    ## T = 1000                     1.09861229                    1.08179623
+    ## T = 2000                     1.09675448                    1.09079086
+    ##          Classical KNN
+    ## T = 50      0.02301656
+    ## T = 100     0.02485236
+    ## T = 500     0.04455946
+    ## T = 1000    0.07830588
+    ## T = 2000    0.16763328
 
 # Process LaTeX table
 
@@ -1400,15 +1508,33 @@ clustering and classification simulations.
       latex_classif_code = paste(paste("$",names(latex_classif_code), "$ & "), latex_classif_code) %>% 
         paste(collapse = " \\ ")
       
-      # process clustering
+      # process clustering acc 
       
-      latex_cluster_code = scenario_tables[[2]] %>%  formatC(format = "f", digits = 2) %>% 
+      latex_cluster_acc_code = scenario_tables[[2]] %>%  formatC(format = "f", digits = 2) %>% 
         apply(MARGIN = 1, FUN = paste, collapse = " & ")
-      latex_cluster_code = paste(paste("$",names(latex_cluster_code), "$ & "), latex_cluster_code) %>% 
+      latex_cluster_acc_code = paste(paste("$",names(latex_cluster_acc_code), "$ & "), latex_cluster_acc_code) %>% 
         paste(collapse = " \\ ")
       
+        # process clustering rand info
+      
+      latex_cluster_RI_code = scenario_tables[[3]] %>%  formatC(format = "f", digits = 2) %>% 
+        apply(MARGIN = 1, FUN = paste, collapse = " & ")
+      latex_cluster_RI_code = paste(paste("$",names(latex_cluster_RI_code), "$ & "), latex_cluster_RI_code) %>% 
+        paste(collapse = " \\ ")
+      
+        # process clustering mutual info 
+      
+      latex_cluster_MI_code = scenario_tables[[4]] %>%  formatC(format = "f", digits = 2) %>% 
+        apply(MARGIN = 1, FUN = paste, collapse = " & ")
+      latex_cluster_MI_code = paste(paste("$",names(latex_cluster_MI_code), "$ & "), latex_cluster_MI_code) %>% 
+        paste(collapse = " \\ ")
+      
+      
+      
       latex_code = list(latex_classif_code = latex_classif_code, 
-                        latex_cluster_code = latex_cluster_code)
+                        latex_cluster_acc_code = latex_cluster_acc_code, 
+                        latex_cluster_RI_code = latex_cluster_RI_code, 
+                        latex_cluster_MI_code = latex_cluster_MI_code)
       
       return(latex_code)
       

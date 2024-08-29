@@ -34,6 +34,7 @@ if (!require("infotheo")) install.packages("infotheo", dependencies = TRUE); lib
 if (!require("fossil")) install.packages("fossil", dependencies = TRUE); library("fossil")
 if (!require("future")) install.packages("future", dependencies = TRUE); library("future")
 if (!require("future.apply")) install.packages("future.apply", dependencies = TRUE); library("future.apply")
+if (!require("progressr")) install.packages("progressr", dependencies = TRUE); library("progressr")
 ```
 
 # Loading Neccessary Functions 
@@ -47,6 +48,7 @@ strReverse <- function(x)
   sapply(lapply(strsplit(x, NULL), rev), paste, collapse="")
 
 
+
 # generate all state space paths from a VLMC tree object 
 vlmcTreePaths= function(vlmcObj)
 {
@@ -58,16 +60,26 @@ vlmcTreePaths= function(vlmcObj)
     #plot(dendrogram)
     for(i in 1:length(names(dendrogram)))
     {
-      string= capture.output(dendrogram[i])
+      string= capture.output( dendrogram[i])
       entries= which(grepl("$", string, fixed=TRUE))
       paths= string[entries]
-      for( j in 1: length(paths))
+      
+      # this is for the weird case when the name of a path of context 
+      # length 1 was not the same as the edge text value
+      if( (length(paths) == 1) && (grep("$", paths) == 1))
       {
-        paths[j]= gsub("$", "", paths[j], fixed=TRUE)
-        paths[j]= gsub("`", "", paths[j], fixed=TRUE)
-        paths[j]= gsub("NA", "", paths[j], fixed=TRUE)
+          allPaths = append(allPaths, attr(dendrogram[[i]], "edgetext"))
+          
+      }else
+      {
+        for( j in 1: length(paths))
+        {
+          paths[j]= gsub("$", "", paths[j], fixed=TRUE)
+          paths[j]= gsub("`", "", paths[j], fixed=TRUE)
+          paths[j]= gsub("NA", "", paths[j], fixed=TRUE)
+        }
+        allPaths=append(allPaths, paths)
       }
-      allPaths=append(allPaths, paths)
     }
   }
   return(allPaths)	
@@ -196,9 +208,17 @@ KNN_dist_matrix <- function(fulldistanceMatrix, train_sample_index, test_sample_
   for (i in 1:length(test_sample_index))
   {
     distances = fulldistanceMatrix[,test_sample_index[i]]
-    dist_to_train_data = distances[train_sample_index]
+    
+    curr_train_index = train_sample_index
+    
+    if(test_sample_index[i] %in% train_sample_index)
+    {
+      curr_train_index = curr_train_index[-which(curr_train_index == test_sample_index[i])]
+    }
+    
+    dist_to_train_data = distances[curr_train_index]
     order_dist = order(dist_to_train_data)[1:n.neighbors]
-    which_train = train_sample_index[order_dist]
+    which_train = curr_train_index[order_dist]
     
     result[i] = as.numeric(majorityVote(all_labels[which_train])$majority)
   }
@@ -211,24 +231,25 @@ KNN_dist_matrix <- function(fulldistanceMatrix, train_sample_index, test_sample_
 We now define a function to measure cluster accuracy.
 
 ```{r}
-Mismatch <- function(mm, true_clusters, K)
-{
-  sigma = permutations(n=K,r=K,v=1:K)
-  
-  Miss = length(which( true_clusters != mm))  ## for permutation 1, 2,... K
-  
-  mm_aux = mm
-  for (ind in 2:dim(sigma)[1])
-  {
+Mismatch <- function(pred_clusters, true_clusters, K) {
+  sigma <- permutations(n = K, r = K, v = 1:K)  # Generate all label permutations
+  min_mismatches <- length(true_clusters)  # Initialize with maximum possible mismatches
+
+  for (i in 1:nrow(sigma)) {
+    # Remap the predicted clusters using the current permutation
+    permuted_pred <- pred_clusters
+    for (j in 1:K) {
+      permuted_pred[pred_clusters == j] <- sigma[i, j]
+    }
+
+    # Count mismatches between permuted clusters and true clusters
+    mismatches <- sum(permuted_pred != true_clusters)
     
-    for (j in 1:K)
-      mm_aux[which(mm == j)] = sigma[ind,j]
-    
-    Miss[ind] =  length(which( true_clusters != mm_aux))
-    
+    # Update minimum mismatches
+    min_mismatches <- min(min_mismatches, mismatches)
   }
-  
-  return(min(Miss))
+
+  return(min_mismatches)
 }
 
 ```
@@ -608,7 +629,6 @@ clustering_results
 
 We will now perform all the simulations for Scenarios 1, 2, and 3 in the main manuscript.  First, we define some general functions for the clustering and classification simulations.  
 ```{r}
-
 run_VLMC_simulation = function(vlmcA, vlmcB,
                                vlmcC = NULL,
                                n.time_series = 100, n.neighbors = 7, 
@@ -662,7 +682,7 @@ run_VLMC_simulation = function(vlmcA, vlmcB,
   vlmcs = vlmcs[sample(n)]
   
   # true labels of shuffled VLMCs
-  all_labels = do.call("rbind", lapply(vlmcs, "[[", 1))
+  all_labels = sapply(vlmcs, "[[", 1)
   
   ##############################################################################################
   # compute distances
@@ -685,7 +705,7 @@ run_VLMC_simulation = function(vlmcA, vlmcB,
       pdistanceMatrix[index,j]= pDistance(vlmcs[[index]][[2]], vlmcs[[j]][[2]], vlmcs[[index]][[3]], vlmcs[[j]][[3]])
     
   }
-  pdistanceMatrix[is.na(pdistanceMatrix)] = 0
+
   pfulldistanceMatrix = pdistanceMatrix + t(pdistanceMatrix)
   
   ##############################################################################################
@@ -905,10 +925,115 @@ run_VLMC_simulation = function(vlmcA, vlmcB,
   clustering_results = clustering_results / n.iter
   
   return_list = list(classif_results = classif_results, 
-                     clustering_results = clustering_results[,1])
+                     clustering_acc = clustering_results[,1], 
+                     clustering_rand = clustering_results[,2], 
+                     clustering_mutual_info = clustering_results[,3])
   
   return(return_list)
 }
+
+run_scenario = function(dataA, dataB, dataC = NULL,
+                        n.time_series = c(50, 100,500,1000, 2000), 
+                        n.simulations = 500,
+                        n = 80,
+                        n.neighbors = 7,
+                        K = 2, 
+                        n.random_splits = 100, 
+                        n.iter = 100,
+                        future_seeds = c(8432, 4901,  219, 6553,  138))
+{
+  
+  
+  # Create pop VLMCs
+  vlmcA = vlmc(dataA)
+  vlmcB = vlmc(dataB)
+  vlmcC = NULL
+  if(!is.null(dataC)[1])
+  {
+    vlmcC = vlmc(dataC, threshold.gen = 100)
+  }
+  
+  draw(vlmcA)
+  draw(vlmcB)
+  if(!is.null(vlmcC))
+  {
+    draw(vlmcC)
+  }
+  
+  scenario_classif_results = matrix(data = 0, nrow = length(n.time_series), 
+                                      ncol = 10)
+  scenario_clustering_acc = matrix(data = 0, nrow = length(n.time_series), 
+                                     ncol = 5)
+  scenario_clustering_rand_index = matrix(data = 0, nrow = length(n.time_series), 
+                                            ncol = 5)
+  
+  scenario_clustering_mutual_info = matrix(data = 0, nrow = length(n.time_series), 
+                                             ncol = 5) 
+  
+  rownames(scenario_classif_results) = paste0("T = ", n.time_series)
+  rownames(scenario_clustering_acc) = paste0("T = ", n.time_series)
+  rownames(scenario_clustering_rand_index) = paste0("T = ", n.time_series)
+  rownames(scenario_clustering_mutual_info) = paste0("T = ", n.time_series)
+  
+  
+  for(i in 1:length(n.time_series))
+  {
+    p <- progressor(steps = n.simulations)
+    
+    plan(multisession)
+    current_sim_res = future_lapply(1:n.simulations, FUN = function(x)
+    {
+        
+      result = run_VLMC_simulation(vlmcA = vlmcA, 
+                                 vlmcB = vlmcB, 
+                                 vlmcC = vlmcC,
+                                 n.time_series = n.time_series[i], 
+                                 n.neighbors = n.neighbors, 
+                                 K = K,
+                                 n = n,
+                                 n.random_splits = n.random_splits, 
+                                 n.iter = n.iter)
+      p()
+      return(result)
+    },future.seed = future_seeds[i])
+    plan(sequential)
+    
+    scenario_classif_results[i, ] = rowMeans(sapply(current_sim_res, "[[", 1))
+    scenario_clustering_acc[i, ] = rowMeans(sapply(current_sim_res, "[[", 2))
+    scenario_clustering_rand_index[i, ] = rowMeans(sapply(current_sim_res, "[[", 3))
+    scenario_clustering_mutual_info[i, ] = rowMeans(sapply(current_sim_res, "[[", 4))
+    
+    if(i == 1)
+    {
+      colnames(scenario_classif_results) = names(rowMeans(sapply(current_sim_res, "[[", 1)))
+      colnames(scenario_clustering_acc) = names(rowMeans(sapply(current_sim_res, "[[", 2)))
+      colnames(scenario_clustering_rand_index) = names(rowMeans(sapply(current_sim_res, "[[", 3)))
+      colnames(scenario_clustering_mutual_info) = names(rowMeans(sapply(current_sim_res, "[[", 4)))
+      
+    }
+    
+    cat(paste("Finished sim", i))
+    
+  }
+
+  scenario_tables = list(scenario_classif_results = scenario_classif_results, 
+                         scenario_clustering_acc = scenario_clustering_acc, 
+                         scenario_clustering_rand_index = scenario_clustering_rand_index, 
+                         scenario_clustering_mutual_info = scenario_clustering_mutual_info)
+  
+  return(scenario_tables)
+}
+
+read_time_series = function(file)
+{
+  suppressWarnings(data <- readLines(file))
+  data = paste(data, collapse = "")
+  data = unlist(strsplit(data, split = ","))
+  data = as.numeric(data)
+  return(data)
+}
+
+
 ```
 
 
@@ -919,70 +1044,27 @@ dataA = c(1, 3, 3, 3, 0, 0, 2, 1, 3, 3, 3, 2, 1, 0, 0, 3, 0, 4, 3, 2, 1, 2, 1, 0
 
 dataB = c(3, 1, 3, 1, 3, 3, 3, 0, 2, 1, 2, 1, 3, 3, 3, 3, 3, 4, 3, 0, 3, 3, 0, 3, 3, 3, 0, 0, 3, 0, 3, 0, 3, 2, 1, 0, 0, 3, 3, 3, 0, 2, 0, 1, 0, 2, 1, 0, 0, 3, 2, 0, 1, 2, 0, 1, 0, 4, 3, 0, 3, 0, 2, 1, 4, 3, 1, 1, 0, 3, 3, 3, 3, 2, 1, 3, 3, 3, 3, 3, 0, 3, 3, 2, 1, 3, 2, 1, 3, 0, 3, 0, 0, 3, 4, 3, 2, 1, 4, 3, 0, 3, 3, 0, 4, 3, 0, 0, 3, 0, 3, 3, 2, 1, 0, 3, 2, 1, 3, 3, 3, 2, 1, 0, 3, 3, 4, 2, 1, 3, 4, 3, 2, 1, 3, 2, 0, 1, 3, 2)
 
-# Create pop VLMCs
-vlmcA = vlmc(dataA)
-vlmcB = vlmc(dataB)
 
-draw(vlmcA)
-draw(vlmcB)
-
-n.time_series = c(50, 100,500,1000, 2000) ## how many observations of the chain we are generating
-scenario_1_classif_results = matrix(data = 0, nrow = length(n.time_series), 
-                                    ncol = 10)
-scenario_1_clustering_results = matrix(data = 0, nrow = length(n.time_series), 
-                                    ncol = 5)
-
-rownames(scenario_1_classif_results) = paste0("T = ", n.time_series)
-rownames(scenario_1_clustering_results) = paste0("T = ", n.time_series)
-
-
+n.time_series = c(50, 100,500,1000, 2000)
 n.simulations = 500
 n = 80
 n.neighbors = 7
 K = 2
-
 future_seeds = c(8432, 4901,  219, 6553,  138)
-
-
-for(i in 1:length(n.time_series))
-{
-  
-  plan(multisession)
-  current_sim_res = future_lapply(1:n.simulations, FUN = function(x)
-  {
-    return(run_VLMC_simulation(vlmcA = vlmcA, 
-                               vlmcB = vlmcB, 
-                               n.time_series = n.time_series[i], 
-                               n.neighbors = n.neighbors, 
-                               K = K,
-                               n = n,
-                               n.random_splits = 100, 
-                               n.iter = 100))
-  },future.seed = future_seeds[i])
-  plan(sequential)
-  
-  scenario_1_classif_results[i, ] = rowMeans(sapply(current_sim_res, "[[", 1))
-  scenario_1_clustering_results[i, ] = rowMeans(sapply(current_sim_res, "[[", 2))
-  
-  if(i == 1)
-  {
-    colnames(scenario_1_classif_results) = names(rowMeans(sapply(current_sim_res, "[[", 1)))
-    colnames(scenario_1_clustering_results) = names(rowMeans(sapply(current_sim_res, "[[", 2)))
-  }
-  
-  cat(paste("Finished sim", i))
-  
-}
-
-scenario_1_classif_results[,1:5]
-scenario_1_classif_results[,6:10]
-
-scenario_1_clustering_results
+n.random_splits = 100
+n.iter = 100
 
 
 # SAVE Results 
-Scenario_1_tables = list(scenario_1_classif_results = scenario_1_classif_results, 
-                         scenario_1_clustering_results = scenario_1_clustering_results)
+with_progress(Scenario_1_tables <- run_scenario(dataA, dataB, dataC = NULL,
+                                 n.time_series = n.time_series, 
+                                 n.simulations = n.simulations,
+                                 n = n,
+                                 n.neighbors = n.neighbors,
+                                 K = K, 
+                                 n.random_splits = n.random_splits, 
+                                 n.iter = n.iter, 
+                                 future_seeds = future_seeds))
 
 saveRDS(Scenario_1_tables, "Scenario_1_tables.RDS")
 
@@ -990,82 +1072,32 @@ saveRDS(Scenario_1_tables, "Scenario_1_tables.RDS")
 
 
 # Scenario 2
+
 ```{r, eval = F}
-read_time_series = function(file)
-{
-  suppressWarnings(data <- readLines(file))
-  data = paste(data, collapse = "")
-  data = unlist(strsplit(data, split = ","))
-  data = as.numeric(data)
-  return(data)
-}
 
 dataA = read_time_series("Scenario2_dataA.txt")
 dataB = read_time_series("Scenario2_dataB.txt")
 
 
-# Create pop VLMCs
-vlmcA = vlmc(dataA)
-vlmcB = vlmc(dataB)
-
-draw(vlmcA)
-draw(vlmcB)
-
-n.time_series = c(50, 100,500,1000, 2000) ## how many observations of the chain we are generating
-scenario_2_classif_results = matrix(data = 0, nrow = length(n.time_series), 
-                                    ncol = 10)
-scenario_2_clustering_results = matrix(data = 0, nrow = length(n.time_series), 
-                                    ncol = 5)
-                                    
-rownames(scenario_2_classif_results) = paste0("T = ", n.time_series)
-rownames(scenario_2_clustering_results) = paste0("T = ", n.time_series)
-
+n.time_series = c(50, 100,500,1000, 2000)
 n.simulations = 500
 n = 80
 n.neighbors = 7
 K = 2
-
 future_seeds = c(8432, 4901,  219, 6553,  138)
+n.random_splits = 100
+n.iter = 100
 
+with_progress(Scenario_2_tables <- run_scenario(dataA, dataB, dataC = NULL,
+                                 n.time_series = n.time_series, 
+                                 n.simulations = n.simulations,
+                                 n = n,
+                                 n.neighbors = n.neighbors,
+                                 K = K, 
+                                 n.random_splits = n.random_splits, 
+                                 n.iter = n.iter, 
+                                 future_seeds = future_seeds))
 
-for(i in 1:length(n.time_series))
-{
-  
-  plan(multisession)
-  current_sim_res = future_lapply(1:n.simulations, FUN = function(x)
-  {
-    return(run_VLMC_simulation(vlmcA = vlmcA, 
-                               vlmcB = vlmcB, 
-                               n.time_series = n.time_series[i], 
-                               n.neighbors = n.neighbors, 
-                               K = K,
-                               n = n,
-                               n.random_splits = 100, 
-                               n.iter = 100))
-  },future.seed = future_seeds[i])
-  plan(sequential)
-  
-  scenario_2_classif_results[i, ] = rowMeans(sapply(current_sim_res, "[[", 1))
-  scenario_2_clustering_results[i, ] = rowMeans(sapply(current_sim_res, "[[", 2))
-  
-  if(i == 1)
-  {
-    colnames(scenario_2_classif_results) = names(rowMeans(sapply(current_sim_res, "[[", 1)))
-    colnames(scenario_2_clustering_results) = names(rowMeans(sapply(current_sim_res, "[[", 2)))
-  }
-  
-  cat(paste("Finished sim", i))
-  
-}
-
-scenario_2_classif_results[,1:5]
-scenario_2_classif_results[,6:10]
-
-scenario_2_clustering_results
-
-# SAVE Results 
-Scenario_2_tables = list(scenario_2_classif_results = scenario_2_classif_results, 
-                         scenario_2_clustering_results = scenario_2_clustering_results)
 
 saveRDS(Scenario_2_tables, "Scenario_2_tables.RDS")
 
@@ -1077,72 +1109,28 @@ saveRDS(Scenario_2_tables, "Scenario_2_tables.RDS")
 
 dataA = read_time_series("Scenario3_dataA.txt")
 dataB = read_time_series("Scenario3_dataB.txt")
-dataC = read_time_series("Scenario3_dataC.txt")
+dataC = readRDS("Scenario3_dataC.RDS")
 
-
-# Create pop VLMCs
-vlmcA = vlmc(dataA)
-vlmcB = vlmc(dataB)
-# changed threshold gen solely to influence construction of population vlmc 
-vlmcC = vlmc(dataC, threshold.gen = 100)
-
-draw(vlmcA)
-draw(vlmcB)
-draw(vlmcC)
-
-
-n.time_series = c(50, 100,500,1000, 2000) ## how many observations of the chain we are generating
-scenario_3_classif_results = matrix(data = 0, nrow = length(n.time_series), 
-                                    ncol = 10)
-scenario_3_clustering_results = matrix(data = 0, nrow = length(n.time_series), 
-                                    ncol = 5)
-rownames(scenario_3_classif_results) = paste0("T = ", n.time_series)
-rownames(scenario_3_clustering_results) = paste0("T = ", n.time_series)
+n.time_series = c(50, 100,500,1000, 2000)
 n.simulations = 500
 n = 120
 n.neighbors = 7
 K = 3
 future_seeds = c(8432, 4901,  219, 6553,  138)
+n.random_splits = 100
+n.iter = 100
 
-
-for(i in 1:length(n.time_series))
-{
-  
-  plan(multisession)
-  current_sim_res = future_lapply(1:n.simulations, FUN = function(x)
-  {
-    return(run_VLMC_simulation(vlmcA = vlmcA, 
-                               vlmcB = vlmcB,
-                               vlmcC = vlmcC, 
-                               n.time_series = n.time_series[i], 
-                               n.neighbors = n.neighbors, 
-                               K = K,
-                               n = n,
-                               n.random_splits = 100, 
-                               n.iter = 100))
-  },future.seed = future_seeds[i])
-  plan(sequential)
-  
-  scenario_3_classif_results[i, ] = rowMeans(sapply(current_sim_res, "[[", 1))
-  scenario_3_clustering_results[i, ] = rowMeans(sapply(current_sim_res, "[[", 2))
-  
-  if(i == 1)
-  {
-    colnames(scenario_3_classif_results) = names(rowMeans(sapply(current_sim_res, "[[", 1)))
-    colnames(scenario_3_clustering_results) = names(rowMeans(sapply(current_sim_res, "[[", 2)))
-  }
-  
-  cat(paste("Finished sim", i))
-  
-}
-
-scenario_3_classif_results
-
-scenario_3_clustering_results
-
-# SAVE Results 
-Scenario_3_tables = list(scenario_3_classif_results = scenario_3_classif_results, 
-                         scenario_3_clustering_results = scenario_3_clustering_results)
+with_progress(Scenario_3_tables <- run_scenario( dataA = dataA,
+                                                 dataB = dataB, 
+                                                 dataC = dataC,
+                                                 n.time_series = n.time_series, 
+                                                 n.simulations = n.simulations,
+                                                 n = n,
+                                                 n.neighbors = n.neighbors,
+                                                 K = K, 
+                                                 n.random_splits = n.random_splits, 
+                                                 n.iter = n.iter, 
+                                                 future_seeds = future_seeds))
 
 saveRDS(Scenario_3_tables, "Scenario_3_tables.RDS")
 
@@ -1175,15 +1163,33 @@ to_latex_table = function(scenario_tables)
   latex_classif_code = paste(paste("$",names(latex_classif_code), "$ & "), latex_classif_code) %>% 
     paste(collapse = " \\ ")
   
-  # process clustering
+  # process clustering acc 
   
-  latex_cluster_code = scenario_tables[[2]] %>%  formatC(format = "f", digits = 2) %>% 
+  latex_cluster_acc_code = scenario_tables[[2]] %>%  formatC(format = "f", digits = 2) %>% 
     apply(MARGIN = 1, FUN = paste, collapse = " & ")
-  latex_cluster_code = paste(paste("$",names(latex_cluster_code), "$ & "), latex_cluster_code) %>% 
+  latex_cluster_acc_code = paste(paste("$",names(latex_cluster_acc_code), "$ & "), latex_cluster_acc_code) %>% 
     paste(collapse = " \\ ")
   
+    # process clustering rand info
+  
+  latex_cluster_RI_code = scenario_tables[[3]] %>%  formatC(format = "f", digits = 2) %>% 
+    apply(MARGIN = 1, FUN = paste, collapse = " & ")
+  latex_cluster_RI_code = paste(paste("$",names(latex_cluster_RI_code), "$ & "), latex_cluster_RI_code) %>% 
+    paste(collapse = " \\ ")
+  
+    # process clustering mutual info 
+  
+  latex_cluster_MI_code = scenario_tables[[4]] %>%  formatC(format = "f", digits = 2) %>% 
+    apply(MARGIN = 1, FUN = paste, collapse = " & ")
+  latex_cluster_MI_code = paste(paste("$",names(latex_cluster_MI_code), "$ & "), latex_cluster_MI_code) %>% 
+    paste(collapse = " \\ ")
+  
+  
+  
   latex_code = list(latex_classif_code = latex_classif_code, 
-                    latex_cluster_code = latex_cluster_code)
+                    latex_cluster_acc_code = latex_cluster_acc_code, 
+                    latex_cluster_RI_code = latex_cluster_RI_code, 
+                    latex_cluster_MI_code = latex_cluster_MI_code)
   
   return(latex_code)
   
