@@ -23,12 +23,10 @@ If you would like to run the results chunk by chunk, please refer to the *Simula
 ## Relevant libraries 
 
 ```{r}
-if (!require("data.tree")) install.packages("data.tree", dependencies = TRUE); library("data.tree")
 if (!require("VLMC")) install.packages("VLMC", dependencies = TRUE); library("VLMC")
 if (!require("stats")) install.packages("stats", dependencies = TRUE); library("stats")
 if (!require("gtools")) install.packages("gtools", dependencies = TRUE); library("gtools")
 if (!require("cluster")) install.packages("cluster", dependencies = TRUE); library("cluster")
-if (!require("factoextra")) install.packages("factoextra", dependencies = TRUE); library("factoextra")
 if (!require("mclust")) install.packages("mclust", dependencies = TRUE); library("mclust")
 if (!require("infotheo")) install.packages("infotheo", dependencies = TRUE); library("infotheo")
 if (!require("fossil")) install.packages("fossil", dependencies = TRUE); library("fossil")

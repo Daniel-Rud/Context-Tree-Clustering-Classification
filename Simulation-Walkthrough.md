@@ -16,10 +16,6 @@ If you would like to run the results chunk by chunk, please refer to the
 
 ## Relevant libraries
 
-    if (!require("data.tree")) install.packages("data.tree", dependencies = TRUE); library("data.tree")
-
-    ## Loading required package: data.tree
-
     if (!require("VLMC")) install.packages("VLMC", dependencies = TRUE); library("VLMC")
 
     ## Loading required package: VLMC
@@ -32,14 +28,6 @@ If you would like to run the results chunk by chunk, please refer to the
     if (!require("cluster")) install.packages("cluster", dependencies = TRUE); library("cluster")
 
     ## Loading required package: cluster
-
-    if (!require("factoextra")) install.packages("factoextra", dependencies = TRUE); library("factoextra")
-
-    ## Loading required package: factoextra
-
-    ## Loading required package: ggplot2
-
-    ## Welcome! Want to learn more? See two factoextra-related books at https://goo.gl/ve3WBa
 
     if (!require("mclust")) install.packages("mclust", dependencies = TRUE); library("mclust")
 
